@@ -1,0 +1,15 @@
+# Swift Package Manager build artifacts
+.build/
+.swiftpm/
+
+# Locally built application bundle
+dist/
+
+# Local design reviews, screenshots, and iteration artifacts
+.impeccable/
+
+# Generated icon source images (the checked-in .icns is used by the app bundle)
+Resources/AppIcon.iconset/
+
+# macOS metadata
+.DS_Store
