@@ -12,6 +12,9 @@ private let captureLog = Logger(subsystem: "com.xiongyufeng.jiedian", category: 
 final class AppCoordinator: ObservableObject {
     @Published var captureSession: CaptureSession?
     @Published var accessibilityTrusted = AXIsProcessTrusted()
+    @Published private(set) var accessibilitySettingsOpenFailed = false
+    @Published private(set) var screenRecordingSettingsOpenFailed = false
+    @Published var captureSaveError: String?
     @Published var notificationStatus: UNAuthorizationStatus = .notDetermined
     @Published private(set) var hotKeyRegistered = false
     @Published private(set) var hotKeyStatus = "尚未注册"
@@ -21,8 +24,14 @@ final class AppCoordinator: ObservableObject {
     private var eventHandler: EventHandlerRef?
     private var isHotKeyInstalled = false
     private var capturePanel: NSPanel?
+    private var accessibilityGuidePanel: NSPanel?
+    private var accessibilityGuideCloseObserver: AccessibilityGuideCloseObserver?
     private var mainWindow: NSWindow?
     private var permissionPollTimer: Timer?
+    private var didEvaluateFirstRunAccessibility = false
+    private var shouldRestoreCapturePanelAfterGuide = false
+
+    private static let accessibilityGuideDismissedKey = "accessibilitySetupGuideDismissed.v1"
 
     init() {
         Task { await refreshNotificationStatus() }
@@ -39,10 +48,12 @@ final class AppCoordinator: ObservableObject {
         installGlobalHotKey()
         startPermissionPolling()
         scheduleUpcomingNotifications()
+        showFirstRunAccessibilityGuideIfNeeded()
     }
 
     func beginCapture() {
         captureLog.notice("beginCapture called")
+        captureSaveError = nil
         accessibilityTrusted = AXIsProcessTrusted()
         let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let selfPID = ProcessInfo.processInfo.processIdentifier
@@ -58,6 +69,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     func beginManualCapture() {
+        captureSaveError = nil
         presentCapture(CaptureSession(text: "", sourceApp: nil, captureMethod: .manual))
     }
 
@@ -68,9 +80,16 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
-    func saveCapture(text: String, deadline: Date, sourceApp: String?) {
+    func saveCapture(text: String, deadline: Date, sourceApp: String?, screenshotData: Data? = nil) {
+        captureSaveError = nil
         guard let store else { return }
-        guard let item = store.add(text: text, deadline: deadline, sourceApp: sourceApp) else {
+        guard let item = store.add(
+            text: text,
+            deadline: deadline,
+            sourceApp: sourceApp,
+            screenshotData: screenshotData
+        ) else {
+            captureSaveError = store.loadError ?? "无法保存这条事项，请重试。"
             return
         }
         capturePanel?.close()
@@ -81,18 +100,79 @@ final class AppCoordinator: ObservableObject {
     }
 
     func dismissCapture() {
+        captureSaveError = nil
         capturePanel?.close()
         capturePanel = nil
         captureSession = nil
     }
 
     func openAccessibilitySettings() {
-        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let options = [promptKey: true] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-            NSWorkspace.shared.open(url)
+        accessibilitySettingsOpenFailed = false
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
+            accessibilitySettingsOpenFailed = true
+            return
         }
+        accessibilitySettingsOpenFailed = !NSWorkspace.shared.open(url)
+    }
+
+    func openScreenRecordingSettings() {
+        screenRecordingSettingsOpenFailed = false
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") else {
+            screenRecordingSettingsOpenFailed = true
+            return
+        }
+        screenRecordingSettingsOpenFailed = !NSWorkspace.shared.open(url)
+    }
+
+    @discardableResult
+    func refreshAccessibilityPermission() -> Bool {
+        accessibilityTrusted = AXIsProcessTrusted()
+        return accessibilityTrusted
+    }
+
+    func showAccessibilityGuide(restoreCapturePanel: Bool = false) {
+        if restoreCapturePanel, let capturePanel, capturePanel.isVisible {
+            shouldRestoreCapturePanelAfterGuide = true
+            capturePanel.orderOut(nil)
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        if let accessibilityGuidePanel {
+            accessibilityGuidePanel.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let root = AccessibilityPermissionGuideView()
+            .environmentObject(self)
+        let hosting = NSHostingController(rootView: root)
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 660),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "辅助功能设置"
+        panel.contentViewController = hosting
+        panel.isMovableByWindowBackground = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.level = .normal
+
+        let closeObserver = AccessibilityGuideCloseObserver { [weak self] in
+            self?.accessibilityGuideDidClose()
+        }
+        panel.delegate = closeObserver
+        accessibilityGuidePanel = panel
+        accessibilityGuideCloseObserver = closeObserver
+
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    func dismissAccessibilityGuide() {
+        UserDefaults.standard.set(true, forKey: Self.accessibilityGuideDismissedKey)
+        accessibilityGuidePanel?.close()
     }
 
     func requestNotificationPermission() {
@@ -181,7 +261,7 @@ final class AppCoordinator: ObservableObject {
             .environmentObject(self)
         let hosting = NSHostingController(rootView: root)
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 520),
             styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -202,14 +282,53 @@ final class AppCoordinator: ObservableObject {
         permissionPollTimer?.invalidate()
         permissionPollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.accessibilityTrusted = AXIsProcessTrusted()
+                self?.refreshAccessibilityPermission()
             }
         }
+    }
+
+    private func showFirstRunAccessibilityGuideIfNeeded() {
+        guard !didEvaluateFirstRunAccessibility else { return }
+        didEvaluateFirstRunAccessibility = true
+
+        guard !refreshAccessibilityPermission(),
+              !UserDefaults.standard.bool(forKey: Self.accessibilityGuideDismissedKey) else {
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.refreshAccessibilityPermission() else { return }
+            self.showAccessibilityGuide()
+        }
+    }
+
+    private func accessibilityGuideDidClose() {
+        UserDefaults.standard.set(true, forKey: Self.accessibilityGuideDismissedKey)
+        accessibilityGuidePanel = nil
+        accessibilityGuideCloseObserver = nil
+
+        guard shouldRestoreCapturePanelAfterGuide else { return }
+        shouldRestoreCapturePanelAfterGuide = false
+        NSApp.activate(ignoringOtherApps: true)
+        capturePanel?.makeKeyAndOrderFront(nil)
     }
 
     private func scheduleUpcomingNotifications() {
         guard let store else { return }
         NotificationService.shared.scheduleAll(store.activeItems)
+    }
+}
+
+@MainActor
+private final class AccessibilityGuideCloseObserver: NSObject, NSWindowDelegate {
+    private let onClose: () -> Void
+
+    init(onClose: @escaping () -> Void) {
+        self.onClose = onClose
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose()
     }
 }
 

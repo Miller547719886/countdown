@@ -7,6 +7,7 @@ public struct CaptureItem: Identifiable, Codable, Equatable, Sendable {
     public let createdAt: Date
     public var completedAt: Date?
     public var sourceApp: String?
+    public var screenshotFilename: String?
 
     public init(
         id: UUID = UUID(),
@@ -14,7 +15,8 @@ public struct CaptureItem: Identifiable, Codable, Equatable, Sendable {
         deadline: Date,
         createdAt: Date = Date(),
         completedAt: Date? = nil,
-        sourceApp: String? = nil
+        sourceApp: String? = nil,
+        screenshotFilename: String? = nil
     ) {
         self.id = id
         self.text = text
@@ -22,6 +24,7 @@ public struct CaptureItem: Identifiable, Codable, Equatable, Sendable {
         self.createdAt = createdAt
         self.completedAt = completedAt
         self.sourceApp = sourceApp
+        self.screenshotFilename = screenshotFilename
     }
 
     public var isCompleted: Bool { completedAt != nil }

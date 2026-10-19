@@ -32,11 +32,11 @@ struct SettingsView: View {
                     title: "读取其他应用中的选中文字",
                     detail: coordinator.accessibilityTrusted
                         ? "已允许。按 ⌘ 1 时会直接读取当前选区。"
-                        : "在系统设置中允许“截点”使用辅助功能。未授权时仍可手动记一项。",
+                        : "首次使用会显示设置向导。未授权时仍可手动记一项。",
                     status: coordinator.accessibilityTrusted ? "已开启" : "未开启",
                     statusColor: coordinator.accessibilityTrusted ? Palette.olive : Palette.vermilion,
-                    actionLabel: coordinator.accessibilityTrusted ? nil : "打开系统设置",
-                    action: coordinator.accessibilityTrusted ? nil : { coordinator.openAccessibilitySettings() }
+                    actionLabel: "查看设置向导",
+                    action: { coordinator.showAccessibilityGuide() }
                 )
 
                 Rule(color: Palette.ruleLight)

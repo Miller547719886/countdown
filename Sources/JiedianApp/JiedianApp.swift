@@ -29,8 +29,8 @@ struct JiedianApp: App {
                 }
             }
             CommandGroup(after: .appInfo) {
-                Button("检查辅助功能权限…") {
-                    coordinator.openAccessibilitySettings()
+                Button("辅助功能设置向导…") {
+                    coordinator.showAccessibilityGuide()
                 }
             }
         }

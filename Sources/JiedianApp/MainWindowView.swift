@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import JiedianCore
 
@@ -82,15 +83,20 @@ struct MainWindowView: View {
                     .padding(.leading, 3)
             }
             Spacer()
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(coordinator.accessibilityTrusted ? Palette.olive : Palette.vermilion)
-                    .frame(width: 6, height: 6)
-                Text(coordinator.accessibilityTrusted ? "选区捕获已就绪" : "需要辅助功能权限")
-                    .font(TypeScale.small)
-                    .foregroundStyle(Palette.inkMuted)
+            Button {
+                coordinator.showAccessibilityGuide()
+            } label: {
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(coordinator.accessibilityTrusted ? Palette.olive : Palette.vermilion)
+                        .frame(width: 6, height: 6)
+                    Text(coordinator.accessibilityTrusted ? "选区捕获已就绪" : "需要辅助功能权限")
+                        .font(TypeScale.small)
+                        .foregroundStyle(Palette.inkMuted)
+                }
             }
-            .help(coordinator.accessibilityTrusted ? "可以从其他应用读取当前选中文字" : "授予辅助功能权限后可直接读取选中文字")
+            .buttonStyle(.plain)
+            .help(coordinator.accessibilityTrusted ? "查看辅助功能权限状态" : "打开辅助功能设置向导")
 
             Button {
                 coordinator.beginCapture()
@@ -258,6 +264,7 @@ struct MainWindowView: View {
                         ForEach(store.activeItems) { item in
                             ItemRow(
                                 item: item,
+                                screenshotURL: store.screenshotURL(for: item),
                                 now: now,
                                 onComplete: { store.complete(item.id) },
                                 onEdit: { editingItem = item },
@@ -298,7 +305,11 @@ struct MainWindowView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(store.completedItems) { item in
-                            CompletedRow(item: item, onRestore: { store.restore(item.id) })
+                            CompletedRow(
+                                item: item,
+                                screenshotURL: store.screenshotURL(for: item),
+                                onRestore: { store.restore(item.id) }
+                            )
                             Rule(color: Palette.ruleLight)
                                 .padding(.leading, 32)
                         }
@@ -351,6 +362,7 @@ struct NextDeadlineStrip: View {
 
 struct ItemRow: View {
     let item: CaptureItem
+    let screenshotURL: URL?
     let now: Date
     let onComplete: () -> Void
     let onEdit: () -> Void
@@ -385,6 +397,10 @@ struct ItemRow: View {
                         .font(TypeScale.small)
                         .foregroundStyle(Palette.inkFaint)
                 }
+                if let screenshotURL {
+                    ScreenshotThumbnail(url: screenshotURL)
+                        .padding(.top, 2)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -417,8 +433,31 @@ struct ItemRow: View {
     }
 }
 
+private struct ScreenshotThumbnail: View {
+    let url: URL
+
+    var body: some View {
+        if let image = NSImage(contentsOf: url) {
+            Button {
+                NSWorkspace.shared.open(url)
+            } label: {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 96, height: 56)
+                    .clipped()
+                    .overlay(Rectangle().stroke(Palette.ruleLight, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .help("查看截图")
+            .accessibilityLabel("打开这条事项的截图")
+        }
+    }
+}
+
 struct CompletedRow: View {
     let item: CaptureItem
+    let screenshotURL: URL?
     let onRestore: () -> Void
 
     var body: some View {
@@ -435,6 +474,10 @@ struct CompletedRow: View {
                 Text(completedLabel)
                     .font(TypeScale.small)
                     .foregroundStyle(Palette.inkFaint)
+                if let screenshotURL {
+                    ScreenshotThumbnail(url: screenshotURL)
+                        .padding(.top, 2)
+                }
             }
             Spacer()
             Button("恢复", action: onRestore)

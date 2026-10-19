@@ -1,9 +1,16 @@
+import AppKit
 import SwiftUI
 import JiedianCore
 
 struct CapturePanelView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @State private var draft = CaptureDraft(text: "", deadline: CaptureDraft.defaultDeadline())
+    @State private var saveScreenshot = false
+    @State private var screenshotData: Data?
+    @State private var screenshotImage: NSImage?
+    @State private var screenshotError: ScreenshotCaptureError?
+    @State private var screenshotTask: Task<Void, Never>?
+    @State private var isCapturingScreenshot = false
     @FocusState private var focusedField: Field?
 
     private enum Field { case text, date, time }
@@ -18,6 +25,13 @@ struct CapturePanelView: View {
                     sourceLine(session)
                     textEditor
                     deadlineSection
+                    screenshotSection
+                    if let captureSaveError = coordinator.captureSaveError {
+                        Text(captureSaveError)
+                            .font(TypeScale.small)
+                            .foregroundStyle(Palette.vermilion)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     footer
                 }
                 .padding(.horizontal, 24)
@@ -25,11 +39,13 @@ struct CapturePanelView: View {
                 .padding(.bottom, 18)
                 .onAppear {
                     draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
+                    resetScreenshotDraft()
                     focusedField = session.text.isEmpty ? .text : .date
                 }
                 .onChange(of: coordinator.captureSession?.id) { _, _ in
                     guard let session = coordinator.captureSession else { return }
                     draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
+                    resetScreenshotDraft()
                     focusedField = session.text.isEmpty ? .text : .date
                 }
             }
@@ -38,6 +54,7 @@ struct CapturePanelView: View {
         .background(Palette.paperRaised)
         .preferredColorScheme(.light)
         .onExitCommand { coordinator.dismissCapture() }
+        .onDisappear { screenshotTask?.cancel() }
     }
 
     private var panelHeader: some View {
@@ -85,8 +102,8 @@ struct CapturePanelView: View {
             }
             Spacer()
             if session.captureMethod == .manual && !coordinator.accessibilityTrusted {
-                Button("开启选区捕获") {
-                    coordinator.openAccessibilitySettings()
+                Button("查看设置步骤") {
+                    coordinator.showAccessibilityGuide(restoreCapturePanel: true)
                 }
                 .buttonStyle(.plain)
                 .font(TypeScale.small)
@@ -201,13 +218,141 @@ struct CapturePanelView: View {
                 coordinator.saveCapture(
                     text: draft.trimmedText,
                     deadline: draft.deadline,
-                    sourceApp: coordinator.captureSession?.sourceApp
+                    sourceApp: coordinator.captureSession?.sourceApp,
+                    screenshotData: saveScreenshot ? screenshotData : nil
                 )
             }
             .buttonStyle(PrimaryButtonStyle())
             .keyboardShortcut(.return, modifiers: .command)
-            .disabled(!draft.canSave)
+            .disabled(
+                !draft.canSave || isCapturingScreenshot || (saveScreenshot && screenshotData == nil)
+            )
         }
+    }
+
+    private var screenshotSection: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .center, spacing: 12) {
+                Toggle(isOn: $saveScreenshot) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("保存截图")
+                            .font(TypeScale.label)
+                            .foregroundStyle(Palette.ink)
+                        Text("截取当前屏幕，不含截点面板；仅保存在这台 Mac。")
+                            .font(TypeScale.small)
+                            .foregroundStyle(Palette.inkFaint)
+                    }
+                }
+                .toggleStyle(.checkbox)
+
+                Spacer(minLength: 0)
+
+                if isCapturingScreenshot {
+                    ProgressView()
+                        .controlSize(.small)
+                        .help("正在截取当前屏幕")
+                } else if let screenshotImage {
+                    Image(nsImage: screenshotImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 76, height: 46)
+                        .clipped()
+                        .overlay(Rectangle().stroke(Palette.ruleLight, lineWidth: 1))
+                        .accessibilityLabel("待保存截图预览")
+                }
+            }
+
+            if let screenshotError {
+                HStack(alignment: .center, spacing: 8) {
+                    Text(screenshotError.localizedDescription)
+                        .font(TypeScale.small)
+                        .foregroundStyle(Palette.vermilion)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 4)
+                    if case .permissionDenied = screenshotError {
+                        Button("打开系统设置") {
+                            coordinator.openScreenRecordingSettings()
+                        }
+                        .buttonStyle(.plain)
+                        .font(TypeScale.small)
+                        .foregroundStyle(Palette.vermilion)
+                    }
+                    Button("重试") {
+                        startScreenshotCapture()
+                    }
+                    .buttonStyle(.plain)
+                    .font(TypeScale.small)
+                    .foregroundStyle(Palette.inkMuted)
+                }
+            }
+
+            if coordinator.screenRecordingSettingsOpenFailed {
+                Text("无法自动打开系统设置。请手动进入：隐私与安全性 → 屏幕录制。")
+                    .font(TypeScale.small)
+                    .foregroundStyle(Palette.vermilion)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.top, 2)
+        .onChange(of: saveScreenshot) { _, enabled in
+            if enabled {
+                startScreenshotCapture()
+            } else {
+                clearScreenshotData()
+            }
+        }
+    }
+
+    private func startScreenshotCapture() {
+        screenshotTask?.cancel()
+        screenshotData = nil
+        screenshotImage = nil
+        screenshotError = nil
+        isCapturingScreenshot = true
+
+        let sessionID = coordinator.captureSession?.id
+        screenshotTask = Task { @MainActor in
+            do {
+                let data = try await ScreenshotCaptureService.capturePNG()
+                guard !Task.isCancelled,
+                      saveScreenshot,
+                      coordinator.captureSession?.id == sessionID else { return }
+                guard let image = NSImage(data: data) else {
+                    screenshotError = .imageEncodingFailed
+                    screenshotData = nil
+                    screenshotImage = nil
+                    isCapturingScreenshot = false
+                    screenshotTask = nil
+                    return
+                }
+                screenshotData = data
+                screenshotImage = image
+            } catch let error as ScreenshotCaptureError {
+                guard !Task.isCancelled,
+                      coordinator.captureSession?.id == sessionID else { return }
+                screenshotError = error
+            } catch {
+                guard !Task.isCancelled,
+                      coordinator.captureSession?.id == sessionID else { return }
+                screenshotError = .captureFailed
+            }
+            isCapturingScreenshot = false
+            screenshotTask = nil
+        }
+    }
+
+    private func clearScreenshotData() {
+        screenshotTask?.cancel()
+        screenshotTask = nil
+        screenshotData = nil
+        screenshotImage = nil
+        screenshotError = nil
+        isCapturingScreenshot = false
+    }
+
+    private func resetScreenshotDraft() {
+        clearScreenshotData()
+        saveScreenshot = false
     }
 
     private var deadlineFeedback: String {

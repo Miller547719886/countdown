@@ -43,7 +43,40 @@ struct JiedianChecks {
             throw CheckFailure("restore did not return the item")
         }
 
-        print("Jiedian core checks passed: capture, validation, sorting, persistence, overdue, complete, restore")
+        let screenshotPayload = Data("test-png-payload".utf8)
+        guard let itemWithScreenshot = store.add(
+            text: "带截图的事项",
+            deadline: now.addingTimeInterval(9_000),
+            sourceApp: "Safari",
+            screenshotData: screenshotPayload
+        ), let attachmentURL = store.screenshotURL(for: itemWithScreenshot),
+           try Data(contentsOf: attachmentURL) == screenshotPayload else {
+            throw CheckFailure("screenshot attachment was not written next to its item")
+        }
+
+        let storeAfterScreenshot = ItemStore(fileURL: fileURL, now: { now })
+        guard let reloadedScreenshotItem = storeAfterScreenshot.item(withID: itemWithScreenshot.id),
+              reloadedScreenshotItem.screenshotFilename == itemWithScreenshot.screenshotFilename,
+              storeAfterScreenshot.screenshotURL(for: reloadedScreenshotItem) == attachmentURL else {
+            throw CheckFailure("screenshot attachment reference did not survive reload")
+        }
+
+        let legacyRecord = Data("""
+        [{"id":"44444444-4444-4444-4444-444444444444","text":"旧记录","deadline":"2023-11-14T22:13:20Z","createdAt":"2023-11-14T22:13:20Z","completedAt":null,"sourceApp":null}]
+        """.utf8)
+        let legacyDecoder = JSONDecoder()
+        legacyDecoder.dateDecodingStrategy = .iso8601
+        let decodedLegacyRecord = try legacyDecoder.decode([CaptureItem].self, from: legacyRecord)
+        guard decodedLegacyRecord.first?.screenshotFilename == nil else {
+            throw CheckFailure("legacy item did not decode without a screenshot field")
+        }
+
+        store.delete(itemWithScreenshot.id)
+        guard !FileManager.default.fileExists(atPath: attachmentURL.path) else {
+            throw CheckFailure("deleting an item left its screenshot attachment behind")
+        }
+
+        print("Jiedian core checks passed: capture, validation, sorting, persistence, overdue, complete, restore, screenshot attachments")
     }
 }
 

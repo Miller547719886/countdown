@@ -14,11 +14,14 @@ let package = Package(
         .executableTarget(
             name: "JiedianApp",
             dependencies: ["JiedianCore"],
+            resources: [.process("Resources")],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("ApplicationServices"),
+                .linkedFramework("CoreGraphics"),
+                .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("UserNotifications")
             ]
         ),

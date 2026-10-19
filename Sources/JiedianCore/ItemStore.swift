@@ -46,18 +46,53 @@ public final class ItemStore: ObservableObject {
     }
 
     @discardableResult
-    public func add(text: String, deadline: Date, sourceApp: String?) -> CaptureItem? {
+    public func add(
+        text: String,
+        deadline: Date,
+        sourceApp: String?,
+        screenshotData: Data? = nil
+    ) -> CaptureItem? {
         let cleanText = Self.normalized(text)
         guard !cleanText.isEmpty, deadline.timeIntervalSince1970.isFinite else { return nil }
 
+        let itemID = UUID()
+        var screenshotFilename: String?
+        var screenshotURL: URL?
+        if let screenshotData {
+            guard !screenshotData.isEmpty else {
+                loadError = "截图内容为空，请重新截取。"
+                return nil
+            }
+            let filename = "\(itemID.uuidString.lowercased()).png"
+            let url = attachmentsDirectoryURL.appendingPathComponent(filename)
+            do {
+                try FileManager.default.createDirectory(
+                    at: attachmentsDirectoryURL,
+                    withIntermediateDirectories: true
+                )
+                try screenshotData.write(to: url, options: .atomic)
+                screenshotFilename = filename
+                screenshotURL = url
+            } catch {
+                loadError = "无法保存截图：\(error.localizedDescription)"
+                return nil
+            }
+        }
+
         let item = CaptureItem(
+            id: itemID,
             text: cleanText,
             deadline: deadline,
             createdAt: now(),
-            sourceApp: sourceApp
+            sourceApp: sourceApp,
+            screenshotFilename: screenshotFilename
         )
         items.append(item)
-        persist()
+        guard persist() else {
+            items.removeAll { $0.id == item.id }
+            if let screenshotURL { try? FileManager.default.removeItem(at: screenshotURL) }
+            return nil
+        }
         return item
     }
 
@@ -83,8 +118,15 @@ public final class ItemStore: ObservableObject {
     }
 
     public func delete(_ id: UUID) {
-        items.removeAll { $0.id == id }
-        persist()
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        let removed = items.remove(at: index)
+        guard persist() else {
+            items.insert(removed, at: min(index, items.count))
+            return
+        }
+        if let screenshotURL = screenshotURL(for: removed) {
+            try? FileManager.default.removeItem(at: screenshotURL)
+        }
     }
 
     public func item(withID id: UUID) -> CaptureItem? {
@@ -92,6 +134,17 @@ public final class ItemStore: ObservableObject {
     }
 
     public var storageURL: URL { fileURL }
+
+    public var attachmentsDirectoryURL: URL {
+        fileURL.deletingLastPathComponent().appendingPathComponent("attachments", isDirectory: true)
+    }
+
+    public func screenshotURL(for item: CaptureItem) -> URL? {
+        let expectedFilename = "\(item.id.uuidString.lowercased()).png"
+        guard item.screenshotFilename == expectedFilename else { return nil }
+        let url = attachmentsDirectoryURL.appendingPathComponent(expectedFilename)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
 
     private func load() {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
@@ -104,7 +157,8 @@ public final class ItemStore: ObservableObject {
         }
     }
 
-    private func persist() {
+    @discardableResult
+    private func persist() -> Bool {
         do {
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(),
@@ -113,8 +167,10 @@ public final class ItemStore: ObservableObject {
             let data = try encoder.encode(items)
             try data.write(to: fileURL, options: .atomic)
             loadError = nil
+            return true
         } catch {
             loadError = "无法保存事项：\(error.localizedDescription)"
+            return false
         }
     }
 
