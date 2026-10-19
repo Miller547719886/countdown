@@ -21,7 +21,7 @@ struct CapturePanelView: View {
             Rule(color: Palette.ruleLight)
 
             if let session = coordinator.captureSession {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 12) {
                     sourceLine(session)
                     textEditor
                     deadlineSection
@@ -34,9 +34,9 @@ struct CapturePanelView: View {
                     }
                     footer
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-                .padding(.bottom, 18)
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 12)
                 .onAppear {
                     draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
                     resetScreenshotDraft()
@@ -50,8 +50,9 @@ struct CapturePanelView: View {
                 }
             }
         }
-        .frame(width: 560)
+        .frame(width: 520)
         .background(Palette.paperRaised)
+        .ignoresSafeArea(.container, edges: .top)
         .preferredColorScheme(.light)
         .onExitCommand { coordinator.dismissCapture() }
         .onDisappear { screenshotTask?.cancel() }
@@ -82,9 +83,9 @@ struct CapturePanelView: View {
             .buttonStyle(QuietButtonStyle())
             .help("关闭")
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 13)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
     }
 
     private func sourceLine(_ session: CaptureSession) -> some View {
@@ -124,7 +125,7 @@ struct CapturePanelView: View {
                 .focused($focusedField, equals: .text)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 7)
-                .frame(height: 92)
+                .frame(height: 80)
                 .background(Palette.paper)
                 .overlay(Rectangle().stroke(focusedField == .text ? Palette.inkFaint : Palette.ruleLight, lineWidth: 1))
                 .overlay(alignment: .topLeading) {

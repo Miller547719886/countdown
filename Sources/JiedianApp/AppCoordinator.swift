@@ -261,7 +261,7 @@ final class AppCoordinator: ObservableObject {
             .environmentObject(self)
         let hosting = NSHostingController(rootView: root)
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 460),
             styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
