@@ -1,4 +1,5 @@
 import EventKit
+import JiedianCore
 import SwiftUI
 
 struct CalendarSyncSettingsView: View {
@@ -62,7 +63,7 @@ struct CalendarSyncSettingsView: View {
                 .buttonStyle(QuietButtonStyle())
 
                 if calendarSync.pendingCount > 0 {
-                    Text("还有 (calendarSync.pendingCount) 项需要处理。")
+                    Text(CalendarSyncStatus.pendingSummary(calendarSync.pendingCount))
                         .font(TypeScale.small)
                         .foregroundStyle(Palette.vermilion)
                 }

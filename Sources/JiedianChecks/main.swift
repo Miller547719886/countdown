@@ -22,7 +22,8 @@ struct JiedianChecks {
         let completedMarkerURL = CalendarMarker.url(for: markerItemID, isCompleted: true)
         guard let completedMarker = CalendarMarker.parse(url: completedMarkerURL),
               completedMarker.itemID == markerItemID,
-              completedMarker.isCompleted else {
+              completedMarker.isCompleted,
+              completedMarker.completionPrefixIsOwned else {
             throw CheckFailure("completed calendar marker did not round-trip")
         }
 
@@ -55,6 +56,16 @@ struct JiedianChecks {
             throw CheckFailure("calendar notes marker was not replaced in place")
         }
 
+        let whitespaceNotes = "  开头空白\n用户内容\n结尾空白  \n"
+        let whitespaceMarkedNotes = CalendarMarker.upsertNotesMarker(
+            in: whitespaceNotes,
+            itemID: markerItemID,
+            isCompleted: false
+        )
+        guard CalendarMarker.removeNotesMarker(from: whitespaceMarkedNotes) == whitespaceNotes else {
+            throw CheckFailure("calendar notes marker changed user whitespace")
+        }
+
         let olderEvent = CalendarEventCandidate(
             identifier: "older",
             lastModifiedDate: now.addingTimeInterval(-60)
@@ -67,6 +78,27 @@ struct JiedianChecks {
         guard duplicateSelection.candidate?.identifier == "newer",
               duplicateSelection.hasDuplicates else {
             throw CheckFailure("duplicate calendar markers did not choose the newest event")
+        }
+
+        let preferredExternalEvent = CalendarEventCandidate(
+            identifier: "moved-calendar-event",
+            externalIdentifier: "external-1",
+            calendarIdentifier: "calendar-moved",
+            lastModifiedDate: now
+        )
+        let unrelatedExternalEvent = CalendarEventCandidate(
+            identifier: "same-item-different-event",
+            externalIdentifier: "external-other",
+            calendarIdentifier: "calendar-selected",
+            lastModifiedDate: now.addingTimeInterval(60)
+        )
+        let preferredSelection = CalendarMarker.selectCandidate(
+            [preferredExternalEvent, unrelatedExternalEvent],
+            preferredExternalIdentifier: "external-1"
+        )
+        guard preferredSelection.candidate?.identifier == "moved-calendar-event",
+              preferredSelection.hasDuplicates else {
+            throw CheckFailure("calendar external identifier was not preferred while retaining duplicate state")
         }
 
         guard CalendarConflictResolver.winner(
@@ -86,6 +118,14 @@ struct JiedianChecks {
             eventUpdatedAt: now
         ) == .needsAttention else {
             throw CheckFailure("calendar conflict winner was not deterministic")
+        }
+
+        guard CalendarSyncStatus.pendingCount([
+            CaptureItem(text: "已同步", deadline: now, createdAt: now, calendarSyncState: .synced),
+            CaptureItem(text: "待处理", deadline: now, createdAt: now, calendarSyncState: .needsAttention)
+        ]) == 1,
+        CalendarSyncStatus.pendingSummary(2) == "还有 2 项需要处理。" else {
+            throw CheckFailure("calendar pending status text/count was incorrect")
         }
 
         let routerItem = CaptureItem(
@@ -144,6 +184,16 @@ struct JiedianChecks {
             throw CheckFailure("active calendar event projection was incorrect")
         }
 
+        let userCheckmarkProjection = CalendarEventProjection(item: CaptureItem(
+            id: markerItemID,
+            text: "✓ review",
+            deadline: projectionDeadline,
+            createdAt: now
+        ))
+        guard userCheckmarkProjection.title == "✓ review" else {
+            throw CheckFailure("active user title beginning with a checkmark was changed")
+        }
+
         let completedProjectionItem = CaptureItem(
             id: markerItemID,
             text: "投影事项",
@@ -156,6 +206,24 @@ struct JiedianChecks {
               CalendarMarker.parse(url: completedProjection.markerURL)?.isCompleted == true,
               CalendarMarker.notesMarker(in: completedProjection.notes)?.isCompleted == true else {
             throw CheckFailure("completed calendar event projection was incorrect")
+        }
+
+        let completedLiteralCheckmarkProjection = CalendarEventProjection(item: CaptureItem(
+            id: markerItemID,
+            text: "✓ review",
+            deadline: projectionDeadline,
+            createdAt: now,
+            completedAt: now
+        ))
+        guard completedLiteralCheckmarkProjection.title == "✓ review",
+              CalendarMarker.parse(url: completedLiteralCheckmarkProjection.markerURL)?.completionPrefixIsOwned == false,
+              CalendarMarker.notesMarker(in: completedLiteralCheckmarkProjection.notes)?.completionPrefixIsOwned == false,
+              CalendarMarker.itemText(
+                  fromEventTitle: "✓ review",
+                  isCompleted: true,
+                  completionPrefixIsOwned: false
+              ) == "✓ review" else {
+            throw CheckFailure("completed literal checkmark title was mistaken for a maintained prefix")
         }
 
         let dateChoices = DeadlinePlanner.weekDateChoices(now: now, calendar: calendar)
@@ -289,6 +357,17 @@ struct JiedianChecks {
         guard timestampStore.update(linkedTimestampItem, updatedAt: eventUpdatedAt),
               timestampStore.item(withID: timestampItem.id)?.updatedAt == eventUpdatedAt else {
             throw CheckFailure("calendar-originated update did not preserve its event timestamp")
+        }
+
+        var staleLocalEdit = linkedTimestampItem
+        staleLocalEdit.text = "旧编辑面板内容"
+        staleLocalEdit.calendarLink = nil
+        staleLocalEdit.calendarSyncState = .unlinked
+        timestampNow = now.addingTimeInterval(600)
+        guard timestampStore.update(staleLocalEdit),
+              timestampStore.item(withID: timestampItem.id)?.calendarLink == linkedTimestampItem.calendarLink,
+              timestampStore.item(withID: timestampItem.id)?.calendarSyncState == .synced else {
+            throw CheckFailure("stale local edit erased newer calendar metadata")
         }
 
         let reloadedTimestampStore = ItemStore(fileURL: timestampStoreURL, now: { timestampNow })

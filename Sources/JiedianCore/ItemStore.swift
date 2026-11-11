@@ -103,6 +103,10 @@ public final class ItemStore: ObservableObject {
         var updated = item
         updated.text = Self.normalized(item.text)
         guard !updated.text.isEmpty else { return false }
+        if updatedAt == nil {
+            updated.calendarLink = previous.calendarLink
+            updated.calendarSyncState = previous.calendarSyncState
+        }
         updated.updatedAt = updatedAt ?? now()
         items[index] = updated
         guard persist() else {

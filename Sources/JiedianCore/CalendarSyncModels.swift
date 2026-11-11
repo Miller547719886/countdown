@@ -28,19 +28,34 @@ public struct CalendarLink: Codable, Equatable, Sendable {
 public struct CalendarMarkerPayload: Equatable, Sendable {
     public let itemID: UUID
     public let isCompleted: Bool
+    public let completionPrefixIsOwned: Bool
 
-    public init(itemID: UUID, isCompleted: Bool) {
+    public init(
+        itemID: UUID,
+        isCompleted: Bool,
+        completionPrefixIsOwned: Bool? = nil
+    ) {
         self.itemID = itemID
         self.isCompleted = isCompleted
+        self.completionPrefixIsOwned = completionPrefixIsOwned ?? isCompleted
     }
 }
 
 public struct CalendarEventCandidate: Equatable, Sendable {
     public let identifier: String
+    public let externalIdentifier: String?
+    public let calendarIdentifier: String?
     public let lastModifiedDate: Date?
 
-    public init(identifier: String, lastModifiedDate: Date?) {
+    public init(
+        identifier: String,
+        externalIdentifier: String? = nil,
+        calendarIdentifier: String? = nil,
+        lastModifiedDate: Date?
+    ) {
         self.identifier = identifier
+        self.externalIdentifier = externalIdentifier
+        self.calendarIdentifier = calendarIdentifier
         self.lastModifiedDate = lastModifiedDate
     }
 }
@@ -59,11 +74,16 @@ public enum CalendarMarker {
     private static let scheme = "jiedian"
     private static let host = "item"
     private static let completionQueryName = "completed"
+    private static let completionPrefixQueryName = "prefix"
     private static let notesBegin = "[截点同步 v1]"
     private static let notesEnd = "[/截点同步]"
     private static let completionPrefix = "✓ "
 
-    public static func url(for itemID: UUID, isCompleted: Bool) -> URL {
+    public static func url(
+        for itemID: UUID,
+        isCompleted: Bool,
+        completionPrefixIsOwned: Bool? = nil
+    ) -> URL {
         var components = URLComponents()
         components.scheme = scheme
         components.host = host
@@ -72,6 +92,10 @@ public enum CalendarMarker {
             URLQueryItem(
                 name: completionQueryName,
                 value: isCompleted ? "1" : "0"
+            ),
+            URLQueryItem(
+                name: completionPrefixQueryName,
+                value: isCompleted && (completionPrefixIsOwned ?? true) ? "1" : "0"
             )
         ]
         return components.url!
@@ -89,11 +113,21 @@ public enum CalendarMarker {
               let isCompleted = parseBoolean(completedValue) else {
             return nil
         }
-        return CalendarMarkerPayload(itemID: itemID, isCompleted: isCompleted)
+        let completionPrefixIsOwned = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == completionPrefixQueryName })?
+            .value
+            .flatMap(parseBoolean)
+            ?? isCompleted
+        return CalendarMarkerPayload(
+            itemID: itemID,
+            isCompleted: isCompleted,
+            completionPrefixIsOwned: isCompleted && completionPrefixIsOwned
+        )
     }
 
     public static func applyCompletionPrefix(to title: String, isCompleted: Bool) -> String {
-        guard isCompleted else { return removeCompletionPrefix(from: title) }
+        guard isCompleted else { return title }
         return title.hasPrefix(completionPrefix) ? title : completionPrefix + title
     }
 
@@ -102,20 +136,34 @@ public enum CalendarMarker {
         return String(title.dropFirst(completionPrefix.count))
     }
 
+    public static func itemText(
+        fromEventTitle title: String,
+        isCompleted: Bool,
+        completionPrefixIsOwned: Bool
+    ) -> String {
+        isCompleted && completionPrefixIsOwned ? removeCompletionPrefix(from: title) : title
+    }
+
     public static func itemText(fromEventTitle title: String, isCompleted: Bool) -> String {
-        isCompleted ? removeCompletionPrefix(from: title) : title
+        itemText(
+            fromEventTitle: title,
+            isCompleted: isCompleted,
+            completionPrefixIsOwned: isCompleted
+        )
     }
 
     public static func upsertNotesMarker(
         in notes: String?,
         itemID: UUID,
-        isCompleted: Bool
+        isCompleted: Bool,
+        completionPrefixIsOwned: Bool? = nil
     ) -> String {
         let withoutMarker = notesWithoutMarker(notes)
         let marker = [
             notesBegin,
             "item=\(itemID.uuidString.lowercased())",
             "completed=\(isCompleted ? "1" : "0")",
+            "prefix=\(isCompleted && (completionPrefixIsOwned ?? true) ? "1" : "0")",
             notesEnd
         ].joined(separator: "\n")
 
@@ -143,13 +191,27 @@ public enum CalendarMarker {
               let isCompleted = parseBoolean(completedValue) else {
             return nil
         }
-        return CalendarMarkerPayload(itemID: itemID, isCompleted: isCompleted)
+        let completionPrefixIsOwned = values["prefix"].flatMap(parseBoolean) ?? isCompleted
+        return CalendarMarkerPayload(
+            itemID: itemID,
+            isCompleted: isCompleted,
+            completionPrefixIsOwned: isCompleted && completionPrefixIsOwned
+        )
     }
 
     public static func selectCandidate(
-        _ candidates: [CalendarEventCandidate]
+        _ candidates: [CalendarEventCandidate],
+        preferredExternalIdentifier: String? = nil
     ) -> CalendarEventCandidateSelection {
-        let candidate = candidates.max { lhs, rhs in
+        let preferredCandidates: [CalendarEventCandidate]
+        if let preferredExternalIdentifier {
+            let matches = candidates.filter { $0.externalIdentifier == preferredExternalIdentifier }
+            preferredCandidates = matches.isEmpty ? candidates : matches
+        } else {
+            preferredCandidates = candidates
+        }
+
+        let candidate = preferredCandidates.max { lhs, rhs in
             if let lhsDate = lhs.lastModifiedDate, let rhsDate = rhs.lastModifiedDate,
                lhsDate != rhsDate {
                 return lhsDate < rhsDate
@@ -191,10 +253,21 @@ public enum CalendarMarker {
             return notes
         }
 
+        var removalStart = start.lowerBound
+        if let separatorStart = notes.index(start.lowerBound, offsetBy: -2, limitedBy: notes.startIndex),
+           String(notes[separatorStart..<start.lowerBound]) == "\n\n" {
+            removalStart = separatorStart
+        }
+
+        var removalEnd = end.upperBound
+        if removalStart == notes.startIndex,
+           notes[removalEnd...].hasPrefix("\n\n") {
+            removalEnd = notes.index(removalEnd, offsetBy: 2)
+        }
+
         var result = notes
-        result.removeSubrange(start.lowerBound..<end.upperBound)
+        result.removeSubrange(removalStart..<removalEnd)
         return result
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -245,5 +318,15 @@ public enum CalendarSyncIntentRouter {
             guard let after else { return nil }
             return .upsert(itemID: after.id)
         }
+    }
+}
+
+public enum CalendarSyncStatus {
+    public static func pendingCount(_ items: [CaptureItem]) -> Int {
+        items.filter { $0.calendarSyncState != .synced }.count
+    }
+
+    public static func pendingSummary(_ count: Int) -> String {
+        "还有 \(count) 项需要处理。"
     }
 }

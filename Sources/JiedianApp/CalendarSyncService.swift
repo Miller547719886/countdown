@@ -68,6 +68,7 @@ final class CalendarSyncService: ObservableObject {
     func configure(store: ItemStore) {
         self.store = store
         isConfigured = true
+        updatePendingCount()
         refreshAccessAndCalendars()
         if isEnabled, selectedCalendarIdentifier != nil {
             reconcile()
@@ -133,7 +134,9 @@ final class CalendarSyncService: ObservableObject {
             updateStatusText()
             return
         }
-        guard hasFullAccess, selectedCalendar() != nil else {
+        guard hasFullAccess,
+              let calendar = selectedCalendar(),
+              calendar.allowsContentModifications else {
             lastError = "请先允许日历权限并选择一个可写日历。"
             updateStatusText()
             return
@@ -154,6 +157,7 @@ final class CalendarSyncService: ObservableObject {
     }
 
     func selectCalendar(identifier: String?) {
+        let wasEnabled = isEnabled
         guard let identifier,
               let option = availableCalendars.first(where: { $0.id == identifier }),
               let calendar = eventStore.calendar(withIdentifier: identifier),
@@ -168,11 +172,11 @@ final class CalendarSyncService: ObservableObject {
         }
 
         selectedCalendarIdentifier = identifier
-        isEnabled = true
+        isEnabled = wasEnabled
         defaults.set(identifier, forKey: DefaultsKey.calendarIdentifier)
         defaults.set(option.title, forKey: DefaultsKey.calendarTitle)
         defaults.set(option.sourceTitle, forKey: DefaultsKey.calendarSourceTitle)
-        defaults.set(true, forKey: DefaultsKey.enabled)
+        defaults.set(wasEnabled, forKey: DefaultsKey.enabled)
         lastError = nil
         updateStatusText()
     }
@@ -231,7 +235,10 @@ final class CalendarSyncService: ObservableObject {
 
         for item in store.items where item.calendarLink != nil {
             if deleteEvents {
-                remove(item)
+                guard remove(item) else {
+                    markNeedsAttention(item)
+                    continue
+                }
             }
             var unlinked = item
             unlinked.calendarLink = nil
@@ -260,7 +267,7 @@ final class CalendarSyncService: ObservableObject {
             updateStatusText()
             return false
         }
-        guard selectedCalendar() != nil else {
+        guard let calendar = selectedCalendar(), calendar.allowsContentModifications else {
             lastError = "请选择一个可写的 Apple 日历。"
             updateStatusText()
             return false
@@ -297,15 +304,25 @@ final class CalendarSyncService: ObservableObject {
             let projection = CalendarEventProjection(item: item)
             let lookup = event(for: item, calendar: calendar)
             let event = lookup.event ?? EKEvent(eventStore: eventStore)
-            event.calendar = calendar
+            if let existingCalendar = lookup.event?.calendar {
+                guard existingCalendar.allowsContentModifications else {
+                    lastError = "关联事件所在日历不可写，事项已保留在截点中。"
+                    markNeedsAttention(item)
+                    return
+                }
+            } else {
+                event.calendar = calendar
+            }
             event.title = projection.title
             event.startDate = projection.startDate
             event.endDate = projection.endDate
+            event.isAllDay = false
             event.url = projection.markerURL
             event.notes = CalendarMarker.upsertNotesMarker(
                 in: lookup.event?.notes ?? projection.notes,
                 itemID: item.id,
-                isCompleted: item.isCompleted
+                isCompleted: item.isCompleted,
+                completionPrefixIsOwned: projection.completionPrefixIsOwned
             )
             if lookup.event == nil {
                 event.alarms = []
@@ -318,7 +335,7 @@ final class CalendarSyncService: ObservableObject {
             linked.calendarLink = CalendarLink(
                 eventIdentifier: event.eventIdentifier,
                 calendarItemExternalIdentifier: event.calendarItemExternalIdentifier,
-                calendarIdentifier: calendar.calendarIdentifier,
+                calendarIdentifier: event.calendar?.calendarIdentifier ?? calendar.calendarIdentifier,
                 lastSyncedAt: event.lastModifiedDate ?? Date()
             )
             linked.calendarSyncState = lookup.hasDuplicates ? .needsAttention : .synced
@@ -332,20 +349,28 @@ final class CalendarSyncService: ObservableObject {
         }
     }
 
-    private func remove(_ item: CaptureItem) {
-        guard let calendar = selectedCalendar() else {
-            return
+    @discardableResult
+    private func remove(_ item: CaptureItem) -> Bool {
+        guard hasFullAccess else {
+            lastError = "请先允许“截点”访问 Apple 日历。"
+            return false
+        }
+        guard let calendar = selectedCalendar(), calendar.allowsContentModifications else {
+            lastError = "请选择一个可写的 Apple 日历后再删除关联事件。"
+            return false
         }
         let lookup = event(for: item, calendar: calendar)
-        guard let event = lookup.event else { return }
+        guard let event = lookup.event else { return true }
 
+        let wasApplyingLocalChange = isApplyingLocalChange
         isApplyingLocalChange = true
-        defer { isApplyingLocalChange = false }
+        defer { isApplyingLocalChange = wasApplyingLocalChange }
         do {
             try eventStore.remove(event, span: .thisEvent)
+            return true
         } catch {
             lastError = "无法从 Apple 日历删除事项：\(error.localizedDescription)"
-            return
+            return false
         }
     }
 
@@ -382,7 +407,8 @@ final class CalendarSyncService: ObservableObject {
             var updated = item
             updated.text = CalendarMarker.itemText(
                 fromEventTitle: event.title ?? item.text,
-                isCompleted: marker.isCompleted
+                isCompleted: marker.isCompleted,
+                completionPrefixIsOwned: marker.completionPrefixIsOwned
             )
             updated.deadline = event.startDate
             updated.completedAt = marker.isCompleted ? eventDate : nil
@@ -392,10 +418,15 @@ final class CalendarSyncService: ObservableObject {
                 calendarIdentifier: event.calendar?.calendarIdentifier ?? calendar.calendarIdentifier,
                 lastSyncedAt: eventDate
             )
-            updated.calendarSyncState = lookup.hasDuplicates ? .needsAttention : .synced
+            let calendarIsWritable = event.calendar?.allowsContentModifications ?? false
+            updated.calendarSyncState = lookup.hasDuplicates || !calendarIsWritable
+                ? .needsAttention
+                : .synced
             _ = store?.update(updated, updatedAt: eventDate)
             if lookup.hasDuplicates {
                 lastError = "发现多个相同的截点日历事件，请在设置中处理。"
+            } else if !calendarIsWritable {
+                lastError = "关联事件所在日历不可写，日历改动已保存在截点中。"
             }
         case .needsAttention:
             markNeedsAttention(item)
@@ -430,21 +461,46 @@ final class CalendarSyncService: ObservableObject {
             matching: eventStore.predicateForEvents(
                 withStart: start,
                 end: end,
-                calendars: [calendar]
+                calendars: candidateCalendars(
+                    selected: calendar,
+                    linkedCalendarIdentifier: item.calendarLink?.calendarIdentifier
+                )
             )
         )
         let matches = events.filter { marker(for: $0)?.itemID == item.id }
         let candidates = matches.map {
             CalendarEventCandidate(
                 identifier: $0.eventIdentifier,
+                externalIdentifier: $0.calendarItemExternalIdentifier,
+                calendarIdentifier: $0.calendar?.calendarIdentifier,
                 lastModifiedDate: $0.lastModifiedDate
             )
         }
-        let selection = CalendarMarker.selectCandidate(candidates)
+        let selection = CalendarMarker.selectCandidate(
+            candidates,
+            preferredExternalIdentifier: item.calendarLink?.calendarItemExternalIdentifier
+        )
         let selectedEvent = selection.candidate.flatMap { candidate in
             matches.first { $0.eventIdentifier == candidate.identifier }
         }
         return EventLookup(event: selectedEvent, hasDuplicates: selection.hasDuplicates)
+    }
+
+    private func candidateCalendars(selected calendar: EKCalendar, linkedCalendarIdentifier: String?) -> [EKCalendar] {
+        var calendars: [EKCalendar] = []
+        var identifiers = Set<String>()
+
+        func append(_ candidate: EKCalendar?) {
+            guard let candidate, identifiers.insert(candidate.calendarIdentifier).inserted else { return }
+            calendars.append(candidate)
+        }
+
+        append(calendar)
+        append(linkedCalendarIdentifier.flatMap(eventStore.calendar(withIdentifier:)))
+        for candidate in eventStore.calendars(for: .event) {
+            append(candidate)
+        }
+        return calendars
     }
 
     private func marker(for event: EKEvent) -> CalendarMarkerPayload? {
@@ -495,7 +551,7 @@ final class CalendarSyncService: ObservableObject {
     }
 
     private func updatePendingCount() {
-        pendingCount = store?.items.filter { $0.calendarSyncState != .synced }.count ?? 0
+        pendingCount = CalendarSyncStatus.pendingCount(store?.items ?? [])
     }
 
     private func updateStatusText() {
