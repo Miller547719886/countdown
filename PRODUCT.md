@@ -8,7 +8,7 @@ Native macOS desktop UI.
 
 ## Stack
 
-Native SwiftUI with AppKit integration for global shortcuts, accessibility text capture, menu bar access, and window management. No server and no account.
+Native SwiftUI with AppKit integration for global shortcuts, accessibility text capture, menu bar access, window management, and EventKit calendar synchronization. No server and no account.
 
 ## Users
 
@@ -16,7 +16,7 @@ One person working across notes, messages, documents, and browsers who wants to 
 
 ## Product Purpose
 
-Let the user select text in any app, press Command-1, and immediately turn that selection into a personal item with a required deadline. Keep the resulting items visible as a calm, scannable countdown list.
+Let the user select text in any app, press Command-1, and immediately turn that selection into a personal item with a required deadline. Keep the resulting items visible as a calm, scannable countdown list, with optional two-way links to Apple Calendar across the user's devices.
 
 ## Positioning
 
@@ -24,7 +24,7 @@ A capture-first deadline slip for macOS: the selected sentence becomes the task,
 
 ## Operating Context
 
-The user is mid-reading or mid-writing in another app when a thought needs to be remembered. The app must capture without making them retype the sentence, then ask for a deadline in a compact floating panel. Items are reviewed from the main window or menu bar. All data stays on the Mac.
+The user is mid-reading or mid-writing in another app when a thought needs to be remembered. The app must capture without making them retype the sentence, then ask for a deadline in a compact floating panel. Items are reviewed from the main window or menu bar. The local item record stays on the Mac; an explicitly linked iCloud calendar event can travel through Apple's Calendar sync.
 
 ## Capabilities and Constraints
 
@@ -35,6 +35,8 @@ The user is mid-reading or mid-writing in another app when a thought needs to be
 - Complete, restore, edit, and delete items.
 - Show completed items separately. Do not include progress percentages, progress bars, or goal decomposition.
 - Offer local deadline notifications when the user has granted notification permission.
+- Offer opt-in two-way synchronization for events created and marked by 截点 through Apple Calendar/EventKit.
+- Do not import unmarked calendar events; calendar-side deletion only unlinks and preserves the local item.
 - Keep the app usable when Accessibility permission is not yet granted: the capture panel opens and allows manual entry, while the main window explains how to enable selection capture.
 - Local-first, single-user storage. No account, sync, analytics, or server.
 
@@ -45,4 +47,4 @@ The user is mid-reading or mid-writing in another app when a thought needs to be
 - Make time legible before metadata: date, time, remaining interval, and overdue state.
 - Prefer native macOS behavior and familiar controls over invented interactions.
 - Keep the visual surface calm enough to scan, but specific enough to remember.
-- Keep personal text and deadlines on the device.
+- Keep personal text and deadlines in the local JSON store; use Apple Calendar only for explicitly linked events.

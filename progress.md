@@ -112,3 +112,26 @@
 | What's the goal? | Sequentially complete the accessibility guide, then optional screenshot attachments per record |
 | What have I learned? | See `findings.md`; actual capture requires Screen Recording permission, which was not requested |
 | What have I done? | Accessibility guide and opt-in screenshot attachment feature implemented and verified in sequence |
+
+# Session: 2026-11-11 — Apple Calendar bidirectional sync
+
+## Status
+
+- Implementation and verification tasks 1–6 complete.
+- Added backward-compatible calendar links and mutation timestamps to local records.
+- Added EventKit service with iCloud/writable-calendar selection, marker-based ownership, two-way reconcile, conflict handling, and safe unlink behavior.
+- Added settings UI for permission, calendar selection, explicit migration, retry, disable, and unlink/delete choices.
+
+## Verification evidence
+
+- `swift run JiedianChecks` passed after marker, projection, persistence, and mutation-router changes.
+- `swift build -c release` passed with EventKit integration and settings UI.
+- `sh scripts/build-app.sh` passed; `codesign --verify --deep --strict --verbose=2 dist/截点.app` passed.
+- Packaged plist contains `NSCalendarsFullAccessUsageDescription` and `NSCalendarsUsageDescription`.
+- Live iCloud cross-device verification was intentionally not run because it requires user-controlled Calendar permission and a disposable test calendar.
+
+## Scope decisions
+
+- Only events carrying `jiedian://item/<UUID>` are synchronized; ordinary calendar events are never imported.
+- Existing local items enter Calendar only after the user presses “同步现有事项”.
+- Calendar-side deletion unlinks and preserves the local item; explicit unlink can optionally delete linked events.
