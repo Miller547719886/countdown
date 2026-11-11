@@ -361,6 +361,8 @@ struct CapturePanelView: View {
                     calendarDayCell(date)
                 }
             }
+
+            calendarLegend
         }
         .padding(12)
         .frame(maxWidth: .infinity)
@@ -374,6 +376,29 @@ struct CapturePanelView: View {
 
     private var calendarWeekdayLabels: [String] {
         ["一", "二", "三", "四", "五", "六", "日"]
+    }
+
+    private var calendarLegend: some View {
+        HStack(spacing: 10) {
+            calendarLegendItem(label: "休", text: "休息日", color: Palette.vermilion)
+            calendarLegendItem(label: "班", text: "调休上班", color: Palette.olive)
+            calendarLegendItem(label: "节气", text: "二十四节气", color: Palette.inkFaint)
+            Spacer(minLength: 0)
+        }
+        .font(TypeScale.small)
+        .foregroundStyle(Palette.inkFaint)
+        .padding(.top, 1)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("日历标记：休息日、调休上班、二十四节气")
+    }
+
+    private func calendarLegendItem(label: String, text: String, color: Color) -> some View {
+        HStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(color)
+            Text(text)
+        }
     }
 
     private var calendarMonthTitle: String {
@@ -411,23 +436,40 @@ struct CapturePanelView: View {
             let selected = calendar.isDate(date, inSameDayAs: draft.deadline)
             let isToday = calendar.isDateInToday(date)
             let isBeforeToday = DeadlinePlanner.isBeforeToday(date, calendar: calendar)
+            let info = ChineseCalendarData.info(for: date, calendar: calendar)
             Button {
                 selectDeadlineDate(date)
                 calendarMonth = date
             } label: {
-                VStack(spacing: 2) {
-                    Text("\(calendar.component(.day, from: date))")
-                        .font(.system(size: 13, weight: selected ? .semibold : .regular))
-                        .foregroundStyle(
-                            isBeforeToday
-                                ? Palette.inkFaint
-                                : (selected ? Palette.ink : Palette.inkMuted)
-                        )
-                    Circle()
-                        .fill(isToday ? Palette.vermilion : Color.clear)
-                        .frame(width: 4, height: 4)
+                VStack(spacing: 1) {
+                    HStack(spacing: 3) {
+                        Text("\(calendar.component(.day, from: date))")
+                            .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                            .foregroundStyle(
+                                isBeforeToday
+                                    ? Palette.inkFaint
+                                    : (selected ? Palette.ink : Palette.inkMuted)
+                            )
+                        Circle()
+                            .fill(isToday ? Palette.vermilion : Color.clear)
+                            .frame(width: 4, height: 4)
+                    }
+
+                    HStack(spacing: 2) {
+                        if let holiday = info.holiday {
+                            Text("\(holiday.kind.badge)\(holiday.name)")
+                                .foregroundStyle(holidayColor(for: holiday))
+                        }
+                        if let solarTerm = info.solarTerm {
+                            Text(solarTerm)
+                                .foregroundStyle(Palette.inkFaint)
+                        }
+                    }
+                    .font(.system(size: 8.5, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
                 }
-                .frame(maxWidth: .infinity, minHeight: 38)
+                .frame(maxWidth: .infinity, minHeight: 48)
                 .background(
                     selected && !isBeforeToday
                         ? Palette.paperDeep
@@ -447,15 +489,40 @@ struct CapturePanelView: View {
             .buttonStyle(.plain)
             .disabled(isBeforeToday)
             .accessibilityLabel(
-                isBeforeToday
-                    ? "\(DeadlineText.date(date))，已过去"
-                    : (isToday ? "\(DeadlineText.date(date))，今天" : DeadlineText.date(date))
+                calendarAccessibilityLabel(
+                    for: date,
+                    info: info,
+                    isToday: isToday,
+                    isBeforeToday: isBeforeToday
+                )
             )
         } else {
             Color.clear
-                .frame(maxWidth: .infinity, minHeight: 38)
+                .frame(maxWidth: .infinity, minHeight: 48)
                 .accessibilityHidden(true)
         }
+    }
+
+    private func holidayColor(for holiday: ChineseCalendarHoliday) -> Color {
+        holiday.kind == .offDay ? Palette.vermilion : Palette.olive
+    }
+
+    private func calendarAccessibilityLabel(
+        for date: Date,
+        info: ChineseCalendarDayInfo,
+        isToday: Bool,
+        isBeforeToday: Bool
+    ) -> String {
+        var parts = [DeadlineText.date(date)]
+        if isToday { parts.append("今天") }
+        if isBeforeToday { parts.append("已过去") }
+        if let holiday = info.holiday {
+            parts.append("\(holiday.name)，\(holiday.kind.accessibilityLabel)")
+        }
+        if let solarTerm = info.solarTerm {
+            parts.append("节气\(solarTerm)")
+        }
+        return parts.joined(separator: "，")
     }
 
     private func shiftCalendarMonth(by value: Int) {
