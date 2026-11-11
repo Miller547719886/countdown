@@ -258,6 +258,40 @@ struct JiedianChecks {
             throw CheckFailure("date labels did not include month/day and today marker: \(todayLabel) / \(tomorrowLabel)")
         }
 
+        var chineseCalendar = Calendar(identifier: .gregorian)
+        chineseCalendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let springFestivalDay = chineseCalendar.date(
+            from: DateComponents(year: 2026, month: 2, day: 16)
+        )!
+        let makeUpWorkday = chineseCalendar.date(
+            from: DateComponents(year: 2026, month: 2, day: 14)
+        )!
+        let lichun = chineseCalendar.date(
+            from: DateComponents(year: 2026, month: 2, day: 4)
+        )!
+        let uncovered = chineseCalendar.date(
+            from: DateComponents(year: 2028, month: 1, day: 1)
+        )!
+
+        let offInfo = ChineseCalendarData.info(for: springFestivalDay, calendar: chineseCalendar)
+        guard offInfo.holiday == ChineseCalendarHoliday(name: "春节", kind: .offDay) else {
+            throw CheckFailure("2026-02-16 was not recognized as a Spring Festival off day: \(String(describing: offInfo.holiday))")
+        }
+
+        let workInfo = ChineseCalendarData.info(for: makeUpWorkday, calendar: chineseCalendar)
+        guard workInfo.holiday == ChineseCalendarHoliday(name: "春节", kind: .makeUpWorkday) else {
+            throw CheckFailure("2026-02-14 was not recognized as a Spring Festival make-up workday: \(String(describing: workInfo.holiday))")
+        }
+
+        let termInfo = ChineseCalendarData.info(for: lichun, calendar: chineseCalendar)
+        guard termInfo.solarTerm == "立春" else {
+            throw CheckFailure("2026-02-04 did not resolve to 立春: \(String(describing: termInfo.solarTerm))")
+        }
+
+        guard ChineseCalendarData.info(for: uncovered, calendar: chineseCalendar).holiday == nil else {
+            throw CheckFailure("uncovered holiday year was inferred")
+        }
+
         let store = ItemStore(fileURL: fileURL, now: { now })
         guard store.add(text: "  第二件事  ", deadline: now.addingTimeInterval(7_200), sourceApp: "Safari") != nil else {
             throw CheckFailure("empty add returned nil")
