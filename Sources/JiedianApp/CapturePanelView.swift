@@ -7,6 +7,7 @@ struct CapturePanelView: View {
     @State private var draft = CaptureDraft(text: "", deadline: CaptureDraft.defaultDeadline())
     @State private var saveScreenshot = true
     @State private var deadlineMode: DeadlineEditorMode = .quick
+    @State private var calendarMonth = Date()
     @State private var screenshotData: Data?
     @State private var screenshotImage: NSImage?
     @State private var screenshotError: ScreenshotCaptureError?
@@ -56,6 +57,7 @@ struct CapturePanelView: View {
                 .onAppear {
                     draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
                     deadlineMode = .quick
+                    calendarMonth = draft.deadline
                     resetScreenshotDraft()
                     focusedField = session.text.isEmpty ? .text : .date
                 }
@@ -63,6 +65,7 @@ struct CapturePanelView: View {
                     guard let session = coordinator.captureSession else { return }
                     draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
                     deadlineMode = .quick
+                    calendarMonth = draft.deadline
                     resetScreenshotDraft()
                     focusedField = session.text.isEmpty ? .text : .date
                 }
@@ -192,25 +195,24 @@ struct CapturePanelView: View {
                 }
             }
         }
+        .onChange(of: deadlineMode) { _, mode in
+            if mode == .calendar {
+                calendarMonth = draft.deadline
+            }
+        }
     }
 
     private var quickDeadlineEditor: some View {
-        HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 7) {
                 deadlineSubheading("日期设置")
-                HStack(alignment: .top, spacing: 8) {
-                    weekDateColumn(weekOffset: 0)
-                    weekDateColumn(weekOffset: 1)
-                }
+                weekDateRow(weekOffset: 0)
+                weekDateRow(weekOffset: 1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Rectangle()
-                .fill(Palette.ruleLight)
-                .frame(width: 1)
-                .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 7) {
+                Rule(color: Palette.ruleLight)
+                    .padding(.bottom, 2)
                 deadlineSubheading("时间设置")
                 deadlineTimeControls
                 Text("可直接填写，缺省为 08:00:00")
@@ -223,36 +225,21 @@ struct CapturePanelView: View {
     }
 
     private var calendarDeadlineEditor: some View {
-        HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 7) {
                 deadlineSubheading("日期设置")
-                DatePicker(
-                    "",
-                    selection: $draft.deadline,
-                    displayedComponents: .date
-                )
-                .labelsHidden()
-                .datePickerStyle(.graphical)
-                .frame(width: 232, height: 214)
-                .onChange(of: draft.deadline) { _, _ in
-                    draft.deadlineConfirmed = true
-                }
+                calendarView
             }
-            .frame(width: 232, alignment: .leading)
-
-            Rectangle()
-                .fill(Palette.ruleLight)
-                .frame(width: 1)
-                .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 7) {
+                Rule(color: Palette.ruleLight)
+                    .padding(.bottom, 2)
                 deadlineSubheading("时间设置")
                 deadlineTimeControls
                 Text("时、分、秒均可编辑")
                     .font(TypeScale.small)
                     .foregroundStyle(Palette.inkFaint)
             }
-            .frame(width: 166, alignment: .leading)
         }
     }
 
@@ -262,46 +249,197 @@ struct CapturePanelView: View {
             .foregroundStyle(Palette.ink)
     }
 
-    private func weekDateColumn(weekOffset: Int) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func weekDateRow(weekOffset: Int) -> some View {
+        HStack(spacing: 6) {
             Text(weekOffset == 0 ? "本周" : "下周")
                 .font(TypeScale.small)
                 .foregroundStyle(Palette.inkFaint)
+                .frame(width: 32, alignment: .leading)
 
             ForEach(DeadlinePlanner.weekDateChoices().filter { $0.weekOffset == weekOffset }) { choice in
-                Button {
-                    let calendar = Calendar.current
-                    let time = calendar.dateComponents([.hour, .minute, .second], from: draft.deadline)
-                    draft.deadline = calendar.date(
-                        bySettingHour: time.hour ?? 8,
-                        minute: time.minute ?? 0,
-                        second: time.second ?? 0,
-                        of: choice.date
-                    ) ?? choice.date
-                    draft.deadlineConfirmed = true
-                } label: {
-                    VStack(spacing: 3) {
-                        Text(choice.label)
-                            .font(.system(size: 12.5, weight: .semibold))
-                            .foregroundStyle(isSelected(choice) ? Palette.ink : Palette.inkMuted)
-                            .lineLimit(1)
-                        Text(DeadlinePlanner.dateLabel(choice.date))
-                            .font(.system(size: 11, weight: .regular))
-                            .foregroundStyle(Palette.inkFaint)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(isSelected(choice) ? Palette.paperDeep : Palette.paperRaised)
-                        .overlay(
-                            Rectangle()
-                                .stroke(isSelected(choice) ? Palette.inkFaint : Palette.ruleLight, lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("选择\(choice.label)，\(DeadlinePlanner.dateLabel(choice.date))")
+                dateChoiceButton(choice)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func dateChoiceButton(_ choice: DeadlineDateChoice) -> some View {
+        Button {
+            selectDeadlineDate(choice.date)
+        } label: {
+            VStack(spacing: 3) {
+                Text(choice.label)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(isSelected(choice) ? Palette.ink : Palette.inkMuted)
+                    .lineLimit(1)
+                HStack(spacing: 2) {
+                    Text(DeadlineText.date(choice.date))
+                    if Calendar.current.isDateInToday(choice.date) {
+                        Text("· 今天")
+                            .foregroundStyle(Palette.vermilion)
+                    }
+                }
+                .font(.system(size: 9.5, weight: .regular))
+                .foregroundStyle(Palette.inkFaint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            }
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background(isSelected(choice) ? Palette.paperDeep : Palette.paperRaised)
+            .overlay(
+                Rectangle()
+                    .stroke(isSelected(choice) ? Palette.inkFaint : Palette.ruleLight, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("选择\(choice.label)，\(DeadlinePlanner.dateLabel(choice.date))")
+    }
+
+    private var calendarView: some View {
+        VStack(spacing: 9) {
+            HStack {
+                Button {
+                    shiftCalendarMonth(by: -1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 26, height: 26)
+                }
+                .buttonStyle(QuietButtonStyle())
+                .accessibilityLabel("上个月")
+
+                Spacer()
+
+                Text(calendarMonthTitle)
+                    .font(TypeScale.section)
+                    .foregroundStyle(Palette.ink)
+
+                Spacer()
+
+                Button {
+                    shiftCalendarMonth(by: 1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 26, height: 26)
+                }
+                .buttonStyle(QuietButtonStyle())
+                .accessibilityLabel("下个月")
+            }
+
+            HStack(spacing: 6) {
+                ForEach(calendarWeekdayLabels, id: \.self) { label in
+                    Text(label)
+                        .font(TypeScale.small)
+                        .foregroundStyle(Palette.inkFaint)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            LazyVGrid(columns: calendarColumns, spacing: 6) {
+                ForEach(Array(calendarMonthDates.enumerated()), id: \.offset) { _, date in
+                    calendarDayCell(date)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(Palette.paper)
+        .overlay(Rectangle().stroke(Palette.ruleLight, lineWidth: 1))
+    }
+
+    private var calendarColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+    }
+
+    private var calendarWeekdayLabels: [String] {
+        ["一", "二", "三", "四", "五", "六", "日"]
+    }
+
+    private var calendarMonthTitle: String {
+        let formatter = DateFormatter()
+        formatter.locale = DeadlineText.chineseLocale
+        formatter.calendar = Calendar.current
+        formatter.dateFormat = "yyyy年M月"
+        return formatter.string(from: calendarMonth)
+    }
+
+    private var calendarMonthDates: [Date?] {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month], from: calendarMonth)
+        guard let monthStart = calendar.date(from: components),
+              let dayRange = calendar.range(of: .day, in: .month, for: monthStart) else {
+            return []
+        }
+
+        let weekday = calendar.component(.weekday, from: monthStart)
+        let leadingBlankCount = (weekday + 5) % 7
+        var dates = [Date?](repeating: nil, count: leadingBlankCount)
+        for day in dayRange {
+            dates.append(calendar.date(byAdding: .day, value: day - 1, to: monthStart))
+        }
+
+        let cellCount = ((dates.count + 6) / 7) * 7
+        dates.append(contentsOf: [Date?](repeating: nil, count: cellCount - dates.count))
+        return dates
+    }
+
+    @ViewBuilder
+    private func calendarDayCell(_ date: Date?) -> some View {
+        if let date {
+            let calendar = Calendar.current
+            let selected = calendar.isDate(date, inSameDayAs: draft.deadline)
+            let isToday = calendar.isDateInToday(date)
+            Button {
+                selectDeadlineDate(date)
+                calendarMonth = date
+            } label: {
+                VStack(spacing: 2) {
+                    Text("\(calendar.component(.day, from: date))")
+                        .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                        .foregroundStyle(selected ? Palette.ink : Palette.inkMuted)
+                    Circle()
+                        .fill(isToday ? Palette.vermilion : Color.clear)
+                        .frame(width: 4, height: 4)
+                }
+                .frame(maxWidth: .infinity, minHeight: 38)
+                .background(selected ? Palette.paperDeep : Palette.paperRaised)
+                .overlay(
+                    Rectangle()
+                        .stroke(selected ? Palette.inkFaint : Palette.ruleLight, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                isToday
+                    ? "\(DeadlineText.date(date))，今天"
+                    : DeadlineText.date(date)
+            )
+        } else {
+            Color.clear
+                .frame(maxWidth: .infinity, minHeight: 38)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func shiftCalendarMonth(by value: Int) {
+        calendarMonth = Calendar.current.date(
+            byAdding: .month,
+            value: value,
+            to: calendarMonth
+        ) ?? calendarMonth
+    }
+
+    private func selectDeadlineDate(_ date: Date) {
+        let calendar = Calendar.current
+        let time = calendar.dateComponents([.hour, .minute, .second], from: draft.deadline)
+        draft.deadline = calendar.date(
+            bySettingHour: time.hour ?? 8,
+            minute: time.minute ?? 0,
+            second: time.second ?? 0,
+            of: date
+        ) ?? date
+        draft.deadlineConfirmed = true
+        calendarMonth = draft.deadline
     }
 
     private var deadlineTimeControls: some View {
