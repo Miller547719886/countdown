@@ -8,6 +8,7 @@ configuration=${JIEDIAN_CONFIGURATION:-release}
 app_dir="$project_dir/dist/截点.app"
 binary="$project_dir/.build/arm64-apple-macosx/$configuration/Jiedian"
 resource_bundle="$project_dir/.build/arm64-apple-macosx/$configuration/Jiedian_JiedianApp.bundle"
+core_resource_bundle="$project_dir/.build/arm64-apple-macosx/$configuration/Jiedian_JiedianCore.bundle"
 
 swift build -c "$configuration"
 
@@ -21,6 +22,12 @@ if [ ! -d "$resource_bundle" ]; then
     exit 1
 fi
 cp -R "$resource_bundle" "$app_dir/Contents/Resources/"
+
+if [ ! -d "$core_resource_bundle" ]; then
+    printf '%s\n' "Missing core resources: $core_resource_bundle" >&2
+    exit 1
+fi
+cp -R "$core_resource_bundle" "$app_dir/Contents/Resources/"
 
 if [ -f "$project_dir/Resources/AppIcon.icns" ]; then
     cp "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/AppIcon.icns"
