@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import EventKit
 import Foundation
@@ -26,6 +27,7 @@ final class CalendarSyncService: ObservableObject {
     @Published private(set) var pendingCount = 0
     @Published private(set) var lastError: String?
     @Published private(set) var isSyncing = false
+    @Published private(set) var settingsOpenFailed = false
 
     private let eventStore: EKEventStore
     private let defaults: UserDefaults
@@ -109,7 +111,7 @@ final class CalendarSyncService: ObservableObject {
 
         availableCalendars = eventStore
             .calendars(for: .event)
-            .filter { $0.allowedEntityTypes.contains(.event) }
+            .filter { $0.allowedEntityTypes.contains(.event) && $0.allowsContentModifications }
             .map(CalendarOption.init)
             .sorted {
                 if $0.isCloudBacked != $1.isCloudBacked {
@@ -122,6 +124,33 @@ final class CalendarSyncService: ObservableObject {
         restoreSelectedCalendar()
         installChangeObserverIfNeeded()
         updateStatusText()
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        guard enabled else {
+            isEnabled = false
+            defaults.set(false, forKey: DefaultsKey.enabled)
+            updateStatusText()
+            return
+        }
+        guard hasFullAccess, selectedCalendar() != nil else {
+            lastError = "请先允许日历权限并选择一个可写日历。"
+            updateStatusText()
+            return
+        }
+        isEnabled = true
+        defaults.set(true, forKey: DefaultsKey.enabled)
+        lastError = nil
+        updateStatusText()
+    }
+
+    func openCalendarSettings() {
+        settingsOpenFailed = false
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") else {
+            settingsOpenFailed = true
+            return
+        }
+        settingsOpenFailed = !NSWorkspace.shared.open(url)
     }
 
     func selectCalendar(identifier: String?) {

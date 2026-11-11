@@ -65,11 +65,15 @@ struct SettingsView: View {
 
                 Rule(color: Palette.ruleLight)
 
+                CalendarSyncSettingsView()
+
+                Rule(color: Palette.ruleLight)
+
                 VStack(alignment: .leading, spacing: 7) {
                     Text("数据")
                         .font(TypeScale.section)
                         .foregroundStyle(Palette.ink)
-                    Text("事项只保存在这台 Mac 的本地文件中，不会上传或同步。")
+                    Text("事项默认保存在这台 Mac；开启 Apple 日历同步后，关联事件由系统日历在设备间同步。")
                         .font(TypeScale.small)
                         .foregroundStyle(Palette.inkMuted)
                 }
