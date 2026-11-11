@@ -263,13 +263,19 @@ struct CapturePanelView: View {
     }
 
     private func dateChoiceButton(_ choice: DeadlineDateChoice) -> some View {
-        Button {
+        let isBeforeToday = DeadlinePlanner.isBeforeToday(choice.date)
+
+        return Button {
             selectDeadlineDate(choice.date)
         } label: {
             VStack(spacing: 3) {
                 Text(choice.label)
                     .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(isSelected(choice) ? Palette.ink : Palette.inkMuted)
+                    .foregroundStyle(
+                        isBeforeToday
+                            ? Palette.inkFaint
+                            : (isSelected(choice) ? Palette.ink : Palette.inkMuted)
+                    )
                     .lineLimit(1)
                 HStack(spacing: 2) {
                     Text(DeadlineText.date(choice.date))
@@ -284,14 +290,29 @@ struct CapturePanelView: View {
                 .minimumScaleFactor(0.6)
             }
             .frame(maxWidth: .infinity, minHeight: 48)
-            .background(isSelected(choice) ? Palette.paperDeep : Palette.paperRaised)
+            .background(
+                isSelected(choice) && !isBeforeToday
+                    ? Palette.paperDeep
+                    : Palette.paperRaised
+            )
             .overlay(
                 Rectangle()
-                    .stroke(isSelected(choice) ? Palette.inkFaint : Palette.ruleLight, lineWidth: 1)
+                    .stroke(
+                        isSelected(choice) && !isBeforeToday
+                            ? Palette.inkFaint
+                            : Palette.ruleLight,
+                        lineWidth: 1
+                    )
             )
+            .opacity(isBeforeToday ? 0.52 : 1)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("选择\(choice.label)，\(DeadlinePlanner.dateLabel(choice.date))")
+        .disabled(isBeforeToday)
+        .accessibilityLabel(
+            isBeforeToday
+                ? "选择\(choice.label)，\(DeadlinePlanner.dateLabel(choice.date))，已过去"
+                : "选择\(choice.label)，\(DeadlinePlanner.dateLabel(choice.date))"
+        )
     }
 
     private var calendarView: some View {
@@ -389,6 +410,7 @@ struct CapturePanelView: View {
             let calendar = Calendar.current
             let selected = calendar.isDate(date, inSameDayAs: draft.deadline)
             let isToday = calendar.isDateInToday(date)
+            let isBeforeToday = DeadlinePlanner.isBeforeToday(date, calendar: calendar)
             Button {
                 selectDeadlineDate(date)
                 calendarMonth = date
@@ -396,23 +418,38 @@ struct CapturePanelView: View {
                 VStack(spacing: 2) {
                     Text("\(calendar.component(.day, from: date))")
                         .font(.system(size: 13, weight: selected ? .semibold : .regular))
-                        .foregroundStyle(selected ? Palette.ink : Palette.inkMuted)
+                        .foregroundStyle(
+                            isBeforeToday
+                                ? Palette.inkFaint
+                                : (selected ? Palette.ink : Palette.inkMuted)
+                        )
                     Circle()
                         .fill(isToday ? Palette.vermilion : Color.clear)
                         .frame(width: 4, height: 4)
                 }
                 .frame(maxWidth: .infinity, minHeight: 38)
-                .background(selected ? Palette.paperDeep : Palette.paperRaised)
+                .background(
+                    selected && !isBeforeToday
+                        ? Palette.paperDeep
+                        : Palette.paperRaised
+                )
                 .overlay(
                     Rectangle()
-                        .stroke(selected ? Palette.inkFaint : Palette.ruleLight, lineWidth: 1)
+                        .stroke(
+                            selected && !isBeforeToday
+                                ? Palette.inkFaint
+                                : Palette.ruleLight,
+                            lineWidth: 1
+                        )
                 )
+                .opacity(isBeforeToday ? 0.52 : 1)
             }
             .buttonStyle(.plain)
+            .disabled(isBeforeToday)
             .accessibilityLabel(
-                isToday
-                    ? "\(DeadlineText.date(date))，今天"
-                    : DeadlineText.date(date)
+                isBeforeToday
+                    ? "\(DeadlineText.date(date))，已过去"
+                    : (isToday ? "\(DeadlineText.date(date))，今天" : DeadlineText.date(date))
             )
         } else {
             Color.clear

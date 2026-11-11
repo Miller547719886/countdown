@@ -49,9 +49,9 @@
 - Consumes: `DeadlinePlanner.isBeforeToday` from Task 1.
 - Produces: disabled, still-visible past date controls with accessible status text.
 
-- [ ] **Step 1: Add the two UI call sites** that consume `DeadlinePlanner.isBeforeToday`, keeping the derived flag local to each date control.
-- [ ] **Step 2: Add `.disabled(isBeforeToday)` plus muted styling and an “已过去” accessibility suffix to quick buttons and calendar cells; leave month navigation and today enabled.**
-- [ ] **Step 3: Run `swift run JiedianChecks` and `swift build -c release` to verify the boundary checks and the macOS app compile.**
+- [x] **Step 1: Add the two UI call sites** that consume `DeadlinePlanner.isBeforeToday`, keeping the derived flag local to each date control.
+- [x] **Step 2: Add `.disabled(isBeforeToday)` plus muted styling and an “已过去” accessibility suffix to quick buttons and calendar cells; leave month navigation and today enabled.**
+- [x] **Step 3: Run `swift run JiedianChecks` and `swift build -c release` to verify the boundary checks and the macOS app compile.**
 
 ### Task 3: Final verification
 
