@@ -59,4 +59,13 @@ public enum DeadlinePlanner {
     public static func clampedSeconds(_ value: Int) -> Int {
         min(max(value, 0), 59)
     }
+
+    public static func dateLabel(
+        _ date: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String {
+        let label = DeadlineText.date(date, calendar: calendar)
+        return calendar.isDate(date, inSameDayAs: now) ? "\(label) · 今天" : label
+    }
 }

@@ -280,10 +280,17 @@ struct CapturePanelView: View {
                     ) ?? choice.date
                     draft.deadlineConfirmed = true
                 } label: {
-                    Text(choice.label)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isSelected(choice) ? Palette.ink : Palette.inkMuted)
-                        .frame(width: 70, height: 25)
+                    VStack(spacing: 3) {
+                        Text(choice.label)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(isSelected(choice) ? Palette.ink : Palette.inkMuted)
+                            .lineLimit(1)
+                        Text(DeadlinePlanner.dateLabel(choice.date))
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundStyle(Palette.inkFaint)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 52)
                         .background(isSelected(choice) ? Palette.paperDeep : Palette.paperRaised)
                         .overlay(
                             Rectangle()
@@ -291,9 +298,10 @@ struct CapturePanelView: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("选择\(choice.label)")
+                .accessibilityLabel("选择\(choice.label)，\(DeadlinePlanner.dateLabel(choice.date))")
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var deadlineTimeControls: some View {

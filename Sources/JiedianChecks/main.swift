@@ -36,6 +36,14 @@ struct JiedianChecks {
             throw CheckFailure("seconds were not clamped to 00...59")
         }
 
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now)!
+        let todayLabel = DeadlinePlanner.dateLabel(now, now: now, calendar: calendar)
+        let tomorrowLabel = DeadlinePlanner.dateLabel(tomorrow, now: now, calendar: calendar)
+        guard todayLabel == "\(DeadlineText.date(now, calendar: calendar)) · 今天",
+              tomorrowLabel == DeadlineText.date(tomorrow, calendar: calendar) else {
+            throw CheckFailure("date labels did not include month/day and today marker: \(todayLabel) / \(tomorrowLabel)")
+        }
+
         let store = ItemStore(fileURL: fileURL, now: { now })
         guard store.add(text: "  第二件事  ", deadline: now.addingTimeInterval(7_200), sourceApp: "Safari") != nil else {
             throw CheckFailure("empty add returned nil")
