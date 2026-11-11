@@ -22,7 +22,8 @@ let package = Package(
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("ScreenCaptureKit"),
-                .linkedFramework("UserNotifications")
+                .linkedFramework("UserNotifications"),
+                .linkedFramework("EventKit")
             ]
         ),
         .executableTarget(name: "JiedianChecks", dependencies: ["JiedianCore"])

@@ -98,6 +98,38 @@ struct JiedianChecks {
             throw CheckFailure("default deadline time is not 08:00:00")
         }
 
+        let projectionDeadline = now.addingTimeInterval(600)
+        let projectionItem = CaptureItem(
+            id: markerItemID,
+            text: "投影事项",
+            deadline: projectionDeadline,
+            createdAt: now
+        )
+        let projection = CalendarEventProjection(item: projectionItem)
+        guard projection.title == "投影事项",
+              projection.startDate == projectionDeadline,
+              projection.endDate == projectionDeadline.addingTimeInterval(60),
+              CalendarMarker.parse(url: projection.markerURL)?.itemID == markerItemID,
+              CalendarMarker.parse(url: projection.markerURL)?.isCompleted == false,
+              CalendarMarker.notesMarker(in: projection.notes)?.itemID == markerItemID,
+              CalendarMarker.notesMarker(in: projection.notes)?.isCompleted == false else {
+            throw CheckFailure("active calendar event projection was incorrect")
+        }
+
+        let completedProjectionItem = CaptureItem(
+            id: markerItemID,
+            text: "投影事项",
+            deadline: projectionDeadline,
+            createdAt: now,
+            completedAt: now
+        )
+        let completedProjection = CalendarEventProjection(item: completedProjectionItem)
+        guard completedProjection.title == "✓ 投影事项",
+              CalendarMarker.parse(url: completedProjection.markerURL)?.isCompleted == true,
+              CalendarMarker.notesMarker(in: completedProjection.notes)?.isCompleted == true else {
+            throw CheckFailure("completed calendar event projection was incorrect")
+        }
+
         let dateChoices = DeadlinePlanner.weekDateChoices(now: now, calendar: calendar)
         guard dateChoices.count == 14,
               dateChoices.prefix(7).allSatisfy({ $0.weekOffset == 0 }),

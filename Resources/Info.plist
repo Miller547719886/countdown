@@ -28,6 +28,10 @@
     <false/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>截点需要读取和更新关联的截止日历事件，以在 Mac、iPhone 和 iPad 间同步事项。</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>截点需要读取和更新关联的截止日历事件，以在 Mac、iPhone 和 iPad 间同步事项。</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSHumanReadableCopyright</key>
