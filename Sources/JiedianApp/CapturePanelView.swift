@@ -109,21 +109,11 @@ struct CapturePanelView: View {
         .padding(.bottom, 8)
     }
 
+    @ViewBuilder
     private func sourceLine(_ session: CaptureSession) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: session.captureMethod == .manual ? "keyboard" : "selection.pin.in.out")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(Palette.inkFaint)
-            Text(session.captureMethod.label)
-                .font(TypeScale.small)
-                .foregroundStyle(Palette.inkMuted)
-            if let app = session.sourceApp {
-                Text("· \(app)")
-                    .font(TypeScale.small)
-                    .foregroundStyle(Palette.inkFaint)
-            }
-            Spacer()
-            if session.captureMethod == .manual && !coordinator.accessibilityTrusted {
+        if session.captureMethod == .manual && !coordinator.accessibilityTrusted {
+            HStack {
+                Spacer()
                 Button("查看设置步骤") {
                     coordinator.showAccessibilityGuide(restoreCapturePanel: true)
                 }
