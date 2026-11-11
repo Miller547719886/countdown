@@ -9,8 +9,20 @@ let package = Package(
         .executable(name: "Jiedian", targets: ["JiedianApp"]),
         .library(name: "JiedianCore", targets: ["JiedianCore"])
     ],
+    dependencies: [
+        .package(path: "Vendor/Tyme4Swift")
+    ],
     targets: [
-        .target(name: "JiedianCore"),
+        .target(
+            name: "JiedianCore",
+            dependencies: [
+                .product(name: "Tyme4Swift", package: "Tyme4Swift")
+            ],
+            resources: [
+                .copy("Resources/Holidays"),
+                .copy("Resources/ThirdParty")
+            ]
+        ),
         .executableTarget(
             name: "JiedianApp",
             dependencies: ["JiedianCore"],
