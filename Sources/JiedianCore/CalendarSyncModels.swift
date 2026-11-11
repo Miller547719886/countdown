@@ -221,3 +221,29 @@ public enum CalendarSyncIntent: Equatable, Sendable {
     case remove(itemID: UUID, link: CalendarLink?)
     case reconcile
 }
+
+public enum CalendarMutationOrigin: Equatable, Sendable {
+    case local
+    case calendar
+}
+
+public enum CalendarSyncIntentRouter {
+    public static func intent(
+        before: CaptureItem?,
+        after: CaptureItem?,
+        origin: CalendarMutationOrigin
+    ) -> CalendarSyncIntent? {
+        guard origin == .local else { return nil }
+        switch (before, after) {
+        case (nil, let after):
+            guard let after else { return nil }
+            return .upsert(itemID: after.id)
+        case (let before, nil):
+            guard let before else { return nil }
+            return .remove(itemID: before.id, link: before.calendarLink)
+        case (_, let after):
+            guard let after else { return nil }
+            return .upsert(itemID: after.id)
+        }
+    }
+}

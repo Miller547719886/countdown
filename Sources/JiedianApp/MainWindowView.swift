@@ -43,20 +43,21 @@ struct MainWindowView: View {
         .onReceive(clock) { now = $0 }
         .sheet(item: $editingItem) { item in
             EditItemSheet(item: item) { updated in
-                store.update(updated)
+                coordinator.update(updated)
                 editingItem = nil
             }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environmentObject(coordinator)
+                .environmentObject(coordinator.calendarSyncService)
         }
         .alert("删除这项？", isPresented: Binding(
             get: { pendingDelete != nil },
             set: { if !$0 { pendingDelete = nil } }
         ), presenting: pendingDelete) { item in
             Button("删除", role: .destructive) {
-                store.delete(item.id)
+                coordinator.delete(item.id)
                 pendingDelete = nil
             }
             Button("取消", role: .cancel) { pendingDelete = nil }
@@ -266,7 +267,7 @@ struct MainWindowView: View {
                                 item: item,
                                 screenshotURL: store.screenshotURL(for: item),
                                 now: now,
-                                onComplete: { store.complete(item.id) },
+                                onComplete: { coordinator.complete(item.id) },
                                 onEdit: { editingItem = item },
                                 onDelete: { pendingDelete = item }
                             )
@@ -308,7 +309,7 @@ struct MainWindowView: View {
                             CompletedRow(
                                 item: item,
                                 screenshotURL: store.screenshotURL(for: item),
-                                onRestore: { store.restore(item.id) }
+                                onRestore: { coordinator.restore(item.id) }
                             )
                             Rule(color: Palette.ruleLight)
                                 .padding(.leading, 32)

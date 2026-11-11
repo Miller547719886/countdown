@@ -19,6 +19,7 @@ final class AppCoordinator: ObservableObject {
     @Published private(set) var hotKeyRegistered = false
     @Published private(set) var hotKeyStatus = "尚未注册"
 
+    let calendarSyncService: CalendarSyncService
     private weak var store: ItemStore?
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
@@ -34,6 +35,7 @@ final class AppCoordinator: ObservableObject {
     private static let accessibilityGuideDismissedKey = "accessibilitySetupGuideDismissed.v1"
 
     init() {
+        calendarSyncService = CalendarSyncService()
         Task { await refreshNotificationStatus() }
     }
 
@@ -44,6 +46,7 @@ final class AppCoordinator: ObservableObject {
 
     func configure(store: ItemStore) {
         self.store = store
+        calendarSyncService.configure(store: store)
         accessibilityTrusted = AXIsProcessTrusted()
         installGlobalHotKey()
         startPermissionPolling()
@@ -96,7 +99,45 @@ final class AppCoordinator: ObservableObject {
         capturePanel = nil
         captureSession = nil
         NotificationService.shared.schedule(for: item)
+        forwardLocalMutation(before: nil, after: item)
         scheduleUpcomingNotifications()
+    }
+
+    func update(_ item: CaptureItem) {
+        guard let store,
+              let before = store.item(withID: item.id),
+              store.update(item),
+              let after = store.item(withID: item.id) else {
+            return
+        }
+        forwardLocalMutation(before: before, after: after)
+    }
+
+    func complete(_ id: UUID) {
+        guard let store,
+              let before = store.item(withID: id),
+              let after = store.complete(id) else {
+            return
+        }
+        forwardLocalMutation(before: before, after: after)
+    }
+
+    func restore(_ id: UUID) {
+        guard let store,
+              let before = store.item(withID: id),
+              let after = store.restore(id) else {
+            return
+        }
+        forwardLocalMutation(before: before, after: after)
+    }
+
+    func delete(_ id: UUID) {
+        guard let store,
+              let before = store.item(withID: id),
+              store.delete(id) != nil else {
+            return
+        }
+        forwardLocalMutation(before: before, after: nil)
     }
 
     func dismissCapture() {
@@ -316,6 +357,17 @@ final class AppCoordinator: ObservableObject {
     private func scheduleUpcomingNotifications() {
         guard let store else { return }
         NotificationService.shared.scheduleAll(store.activeItems)
+    }
+
+    private func forwardLocalMutation(before: CaptureItem?, after: CaptureItem?) {
+        guard CalendarSyncIntentRouter.intent(
+            before: before,
+            after: after,
+            origin: .local
+        ) != nil else {
+            return
+        }
+        calendarSyncService.syncLocalMutation(before: before, after: after)
     }
 }
 

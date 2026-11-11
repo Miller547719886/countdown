@@ -88,6 +88,34 @@ struct JiedianChecks {
             throw CheckFailure("calendar conflict winner was not deterministic")
         }
 
+        let routerItem = CaptureItem(
+            id: markerItemID,
+            text: "路由事项",
+            deadline: now.addingTimeInterval(900),
+            createdAt: now,
+            calendarLink: CalendarLink(eventIdentifier: "event-router")
+        )
+        guard CalendarSyncIntentRouter.intent(
+            before: nil,
+            after: routerItem,
+            origin: .local
+        ) == .upsert(itemID: markerItemID),
+        CalendarSyncIntentRouter.intent(
+            before: routerItem,
+            after: nil,
+            origin: .local
+        ) == .remove(
+            itemID: markerItemID,
+            link: routerItem.calendarLink
+        ),
+        CalendarSyncIntentRouter.intent(
+            before: routerItem,
+            after: routerItem,
+            origin: .calendar
+        ) == nil else {
+            throw CheckFailure("calendar sync intent router did not guard mutation origin")
+        }
+
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let deadlineDefault = DeadlinePlanner.defaultDeadline(now: now, calendar: calendar)
