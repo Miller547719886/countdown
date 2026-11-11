@@ -11,6 +11,31 @@ struct JiedianChecks {
         let fileURL = directory.appendingPathComponent("items.json")
         let now = Date(timeIntervalSince1970: 1_700_000_000)
 
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let deadlineDefault = DeadlinePlanner.defaultDeadline(now: now, calendar: calendar)
+        let defaultComponents = calendar.dateComponents([.hour, .minute, .second], from: deadlineDefault)
+        guard defaultComponents.hour == 8,
+              defaultComponents.minute == 0,
+              defaultComponents.second == 0 else {
+            throw CheckFailure("default deadline time is not 08:00:00")
+        }
+
+        let dateChoices = DeadlinePlanner.weekDateChoices(now: now, calendar: calendar)
+        guard dateChoices.count == 14,
+              dateChoices.prefix(7).allSatisfy({ $0.weekOffset == 0 }),
+              dateChoices.suffix(7).allSatisfy({ $0.weekOffset == 1 }),
+              dateChoices.map({ calendar.component(.weekday, from: $0.date) }) == [2, 3, 4, 5, 6, 7, 1,
+                                                                                    2, 3, 4, 5, 6, 7, 1] else {
+            throw CheckFailure("date choices are not Monday-first current/next weeks")
+        }
+
+        guard DeadlinePlanner.clampedSeconds(-1) == 0,
+              DeadlinePlanner.clampedSeconds(37) == 37,
+              DeadlinePlanner.clampedSeconds(60) == 59 else {
+            throw CheckFailure("seconds were not clamped to 00...59")
+        }
+
         let store = ItemStore(fileURL: fileURL, now: { now })
         guard store.add(text: "  第二件事  ", deadline: now.addingTimeInterval(7_200), sourceApp: "Safari") != nil else {
             throw CheckFailure("empty add returned nil")

@@ -1,5 +1,13 @@
 # Progress Log
 
+## Session: 2026-11-11 — Deadline editor
+
+- Added `DeadlinePlanner` core helpers for a default 08:00:00 deadline, Monday-first current/next week choices, and seconds clamping.
+- Replaced the capture panel's single deadline row with quick/calendar tabs sharing `draft.deadline`; the quick tab shows 14 date choices and editable time, while the calendar tab shows a month calendar and hour/minute/second controls.
+- New capture sessions default the screenshot checkbox to selected and start the existing capture flow; permission failure still offers settings/retry and unchecking cancels the attachment.
+- Verified the packaged app visually with both tabs; no system settings were changed.
+- Fresh checks: `swift run JiedianChecks`, `swift build -c release`, and `git diff --check` passed.
+
 ## Session: 2026-10-20
 
 ### Continuation: 2026-10-20

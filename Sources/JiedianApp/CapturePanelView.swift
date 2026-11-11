@@ -5,7 +5,8 @@ import JiedianCore
 struct CapturePanelView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @State private var draft = CaptureDraft(text: "", deadline: CaptureDraft.defaultDeadline())
-    @State private var saveScreenshot = false
+    @State private var saveScreenshot = true
+    @State private var deadlineMode: DeadlineEditorMode = .quick
     @State private var screenshotData: Data?
     @State private var screenshotImage: NSImage?
     @State private var screenshotError: ScreenshotCaptureError?
@@ -14,6 +15,21 @@ struct CapturePanelView: View {
     @FocusState private var focusedField: Field?
 
     private enum Field { case text, date, time }
+    private enum DeadlineEditorMode: String, CaseIterable, Identifiable {
+        case quick = "快捷设置"
+        case calendar = "日历设置"
+
+        var id: String { rawValue }
+    }
+
+    private let secondsFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.minimum = 0
+        formatter.maximum = 59
+        formatter.minimumIntegerDigits = 2
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -39,12 +55,14 @@ struct CapturePanelView: View {
                 .padding(.bottom, 12)
                 .onAppear {
                     draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
+                    deadlineMode = .quick
                     resetScreenshotDraft()
                     focusedField = session.text.isEmpty ? .text : .date
                 }
                 .onChange(of: coordinator.captureSession?.id) { _, _ in
                     guard let session = coordinator.captureSession else { return }
                     draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
+                    deadlineMode = .quick
                     resetScreenshotDraft()
                     focusedField = session.text.isEmpty ? .text : .date
                 }
@@ -143,7 +161,7 @@ struct CapturePanelView: View {
 
     private var deadlineSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(alignment: .center) {
                 Text("截止时间")
                     .font(TypeScale.label)
                     .foregroundStyle(Palette.inkFaint)
@@ -156,52 +174,173 @@ struct CapturePanelView: View {
                     .foregroundStyle(draft.isPast ? Palette.vermilion : Palette.inkMuted)
             }
 
-            HStack(spacing: 7) {
-                ForEach(CaptureDraft.quickChoices()) { choice in
-                    Button {
-                        draft.deadline = choice.deadline
-                        draft.deadlineConfirmed = true
-                    } label: {
-                        Text(choice.label)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Palette.ink)
-                            .padding(.horizontal, 9)
-                            .frame(height: 27)
-                            .background(isSelected(choice) ? Palette.paperDeep : Palette.paperRaised)
-                            .overlay(Rectangle().stroke(isSelected(choice) ? Palette.inkFaint : Palette.ruleLight, lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
+            Picker("截止时间视图", selection: $deadlineMode) {
+                ForEach(DeadlineEditorMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
                 }
             }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 224)
 
-            HStack(spacing: 8) {
-                FieldBox {
-                    DatePicker("", selection: $draft.deadline, displayedComponents: .date)
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                        .font(TypeScale.body)
-                        .focused($focusedField, equals: .date)
+            Group {
+                switch deadlineMode {
+                case .quick:
+                    quickDeadlineEditor
+                case .calendar:
+                    calendarDeadlineEditor
                 }
-                .frame(width: 190)
+            }
+        }
+    }
+
+    private var quickDeadlineEditor: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 7) {
+                deadlineSubheading("日期设置")
+                HStack(alignment: .top, spacing: 8) {
+                    weekDateColumn(weekOffset: 0)
+                    weekDateColumn(weekOffset: 1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Rectangle()
+                .fill(Palette.ruleLight)
+                .frame(width: 1)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 7) {
+                deadlineSubheading("时间设置")
+                deadlineTimeControls
+                Text("可直接填写，缺省为 08:00:00")
+                    .font(TypeScale.small)
+                    .foregroundStyle(Palette.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(width: 166, alignment: .leading)
+        }
+    }
+
+    private var calendarDeadlineEditor: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 7) {
+                deadlineSubheading("日期设置")
+                DatePicker(
+                    "",
+                    selection: $draft.deadline,
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+                .datePickerStyle(.graphical)
+                .frame(width: 232, height: 214)
                 .onChange(of: draft.deadline) { _, _ in
                     draft.deadlineConfirmed = true
                 }
+            }
+            .frame(width: 232, alignment: .leading)
 
-                FieldBox {
-                    DatePicker("", selection: $draft.deadline, displayedComponents: .hourAndMinute)
-                        .labelsHidden()
-                        .datePickerStyle(.field)
-                        .font(TypeScale.body)
-                        .focused($focusedField, equals: .time)
-                }
-                .frame(width: 116)
+            Rectangle()
+                .fill(Palette.ruleLight)
+                .frame(width: 1)
+                .padding(.top, 2)
 
-                Spacer()
-                Text(draft.deadlineConfirmed ? "期限已确认" : "请确认期限")
+            VStack(alignment: .leading, spacing: 7) {
+                deadlineSubheading("时间设置")
+                deadlineTimeControls
+                Text("时、分、秒均可编辑")
                     .font(TypeScale.small)
                     .foregroundStyle(Palette.inkFaint)
             }
+            .frame(width: 166, alignment: .leading)
         }
+    }
+
+    private func deadlineSubheading(_ title: String) -> some View {
+        Text(title)
+            .font(TypeScale.section)
+            .foregroundStyle(Palette.ink)
+    }
+
+    private func weekDateColumn(weekOffset: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(weekOffset == 0 ? "本周" : "下周")
+                .font(TypeScale.small)
+                .foregroundStyle(Palette.inkFaint)
+
+            ForEach(DeadlinePlanner.weekDateChoices().filter { $0.weekOffset == weekOffset }) { choice in
+                Button {
+                    let calendar = Calendar.current
+                    let time = calendar.dateComponents([.hour, .minute, .second], from: draft.deadline)
+                    draft.deadline = calendar.date(
+                        bySettingHour: time.hour ?? 8,
+                        minute: time.minute ?? 0,
+                        second: time.second ?? 0,
+                        of: choice.date
+                    ) ?? choice.date
+                    draft.deadlineConfirmed = true
+                } label: {
+                    Text(choice.label)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(isSelected(choice) ? Palette.ink : Palette.inkMuted)
+                        .frame(width: 70, height: 25)
+                        .background(isSelected(choice) ? Palette.paperDeep : Palette.paperRaised)
+                        .overlay(
+                            Rectangle()
+                                .stroke(isSelected(choice) ? Palette.inkFaint : Palette.ruleLight, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("选择\(choice.label)")
+            }
+        }
+    }
+
+    private var deadlineTimeControls: some View {
+        HStack(spacing: 4) {
+            FieldBox {
+                DatePicker("", selection: $draft.deadline, displayedComponents: .hourAndMinute)
+                    .labelsHidden()
+                    .datePickerStyle(.field)
+                    .font(TypeScale.body)
+                    .focused($focusedField, equals: .time)
+                    .onChange(of: draft.deadline) { _, _ in
+                        draft.deadlineConfirmed = true
+                    }
+            }
+            .frame(width: 112)
+
+            Text(":")
+                .font(TypeScale.mono)
+                .foregroundStyle(Palette.inkMuted)
+
+            FieldBox {
+                TextField("秒", value: secondsBinding, formatter: secondsFormatter)
+                    .textFieldStyle(.plain)
+                    .font(TypeScale.mono)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 34)
+                    .accessibilityLabel("秒")
+            }
+            .frame(width: 50)
+        }
+    }
+
+    private var secondsBinding: Binding<Int> {
+        Binding(
+            get: {
+                Calendar.current.component(.second, from: draft.deadline)
+            },
+            set: { value in
+                let seconds = DeadlinePlanner.clampedSeconds(value)
+                draft.deadline = Calendar.current.date(
+                    bySetting: .second,
+                    value: seconds,
+                    of: draft.deadline
+                ) ?? draft.deadline
+                draft.deadlineConfirmed = true
+            }
+        )
     }
 
     private var footer: some View {
@@ -353,7 +492,11 @@ struct CapturePanelView: View {
 
     private func resetScreenshotDraft() {
         clearScreenshotData()
-        saveScreenshot = false
+        if saveScreenshot {
+            startScreenshotCapture()
+        } else {
+            saveScreenshot = true
+        }
     }
 
     private var deadlineFeedback: String {
@@ -361,8 +504,8 @@ struct CapturePanelView: View {
         return DeadlineText.relative(to: draft.deadline)
     }
 
-    private func isSelected(_ choice: CaptureDraft.QuickChoice) -> Bool {
-        abs(draft.deadline.timeIntervalSince(choice.deadline)) < 60
+    private func isSelected(_ choice: DeadlineDateChoice) -> Bool {
+        Calendar.current.isDate(choice.date, inSameDayAs: draft.deadline)
     }
 }
 
@@ -376,60 +519,11 @@ struct CaptureDraft {
     var isPast: Bool { deadline <= Date() }
 
     static func defaultDeadline(now: Date = Date()) -> Date {
-        let calendar = Calendar.current
-        let tonight = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: now) ?? now
-        if tonight > now.addingTimeInterval(1_800) {
-            return tonight
-        }
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now
-        return calendar.date(bySettingHour: 18, minute: 0, second: 0, of: tomorrow) ?? tomorrow
-    }
-
-    static func quickChoices(now: Date = Date()) -> [QuickChoice] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: now)
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? now
-        let tomorrowAtNine = date(at: 9, on: tomorrow, calendar: calendar)
-        var choices: [QuickChoice] = []
-
-        let todayAtSix = date(at: 18, on: today, calendar: calendar)
-        if todayAtSix > now {
-            choices.append(QuickChoice(label: "今天 18:00", deadline: todayAtSix))
-        }
-
-        let tonightAtTen = date(at: 22, on: today, calendar: calendar)
-        if tonightAtTen > now {
-            choices.append(QuickChoice(label: "今晚 22:00", deadline: tonightAtTen))
-        }
-
-        choices.append(QuickChoice(label: "明天 09:00", deadline: tomorrowAtNine))
-
-        let monday = nextMonday(after: now, calendar: calendar)
-        if !calendar.isDate(monday, equalTo: tomorrowAtNine, toGranularity: .minute) {
-            choices.append(QuickChoice(label: "下周一", deadline: monday))
-        }
-        return choices
+        DeadlinePlanner.defaultDeadline(now: now)
     }
 
     func asSession(sourceApp: String?, method: SelectionReader.Method) -> CaptureSession {
         CaptureSession(text: trimmedText, sourceApp: sourceApp, captureMethod: method)
     }
 
-    struct QuickChoice: Identifiable {
-        let label: String
-        let deadline: Date
-        var id: String { label }
-    }
-
-    private static func date(at hour: Int, on day: Date, calendar: Calendar) -> Date {
-        calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
-    }
-
-    private static func nextMonday(after now: Date, calendar: Calendar) -> Date {
-        var date = calendar.date(byAdding: .day, value: 1, to: now) ?? now
-        while calendar.component(.weekday, from: date) != 2 {
-            date = calendar.date(byAdding: .day, value: 1, to: date) ?? date
-        }
-        return Self.date(at: 9, on: date, calendar: calendar)
-    }
 }

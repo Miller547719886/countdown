@@ -1,10 +1,10 @@
-# Task Plan: Accessibility Guide and Optional Record Screenshots
+# Task Plan: Accessibility Guide, Screenshots, and Deadline Editor
 
 ## Goal
-First finish the first-run Accessibility guide with the user's screenshots. After that is verified, add an opt-in screenshot attachment to each saved capture record.
+First finish the first-run Accessibility guide with the user's screenshots and optional record screenshots. Then add a two-tab deadline editor with default screenshot selection.
 
 ## Current Phase
-Phase 6: Final Verification & Delivery
+Phase 7: Deadline Editor Implementation
 
 ## Phases
 
@@ -44,6 +44,14 @@ Phase 6: Final Verification & Delivery
 - [x] Verify both requirements independently and in order
 - [x] Review the code and resource scope against the two requested features
 - [x] Report changed files and verification results
+- **Status:** complete
+
+### Phase 7: Deadline Editor and Default Screenshot
+- [x] Write the short design and implementation plan
+- [x] Add 08:00 default time, 14 date choices, and seconds bounds
+- [x] Replace the single deadline row with quick/calendar tabs sharing one `Date`
+- [x] Make screenshot capture selected by default for each new capture session
+- [x] Run core checks, release build, whitespace check, and scope review
 - **Status:** complete
 
 ## Key Questions
