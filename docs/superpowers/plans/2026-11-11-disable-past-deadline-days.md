@@ -61,4 +61,3 @@
 - [x] **Step 1: Inspect the diff to confirm `EditItemSheet.swift`, `CaptureDraft.canSave`, and default deadline behavior are unchanged.**
 - [x] **Step 2: Run `swift run JiedianChecks` and `swift build -c release`, recording their exit codes.**
 - [x] **Step 3: Run the Impeccable detector on changed UI targets.**
-
