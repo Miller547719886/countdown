@@ -177,8 +177,68 @@ struct JiedianChecks {
         let legacyDecoder = JSONDecoder()
         legacyDecoder.dateDecodingStrategy = .iso8601
         let decodedLegacyRecord = try legacyDecoder.decode([CaptureItem].self, from: legacyRecord)
-        guard decodedLegacyRecord.first?.screenshotFilename == nil else {
+        guard let decodedLegacyItem = decodedLegacyRecord.first,
+              decodedLegacyItem.screenshotFilename == nil,
+              decodedLegacyItem.updatedAt == decodedLegacyItem.createdAt,
+              decodedLegacyItem.calendarLink == nil,
+              decodedLegacyItem.calendarSyncState == .unlinked else {
             throw CheckFailure("legacy item did not decode without a screenshot field")
+        }
+
+        var timestampNow = now
+        let timestampStoreURL = directory.appendingPathComponent("timestamp-items.json")
+        let timestampStore = ItemStore(fileURL: timestampStoreURL, now: { timestampNow })
+        guard let timestampItem = timestampStore.add(
+            text: "更新时间事项",
+            deadline: now.addingTimeInterval(10_000),
+            sourceApp: nil
+        ), timestampItem.updatedAt == now else {
+            throw CheckFailure("new item did not initialize updatedAt from createdAt")
+        }
+
+        timestampNow = now.addingTimeInterval(120)
+        var locallyUpdatedItem = timestampItem
+        locallyUpdatedItem.text = "本地更新"
+        guard timestampStore.update(locallyUpdatedItem),
+              timestampStore.item(withID: timestampItem.id)?.updatedAt == timestampNow else {
+            throw CheckFailure("local item update did not refresh updatedAt")
+        }
+
+        timestampNow = now.addingTimeInterval(240)
+        guard let completedTimestampItem = timestampStore.complete(timestampItem.id),
+              completedTimestampItem.updatedAt == timestampNow else {
+            throw CheckFailure("complete did not refresh updatedAt or return the item")
+        }
+
+        timestampNow = now.addingTimeInterval(360)
+        guard let restoredTimestampItem = timestampStore.restore(timestampItem.id),
+              restoredTimestampItem.updatedAt == timestampNow else {
+            throw CheckFailure("restore did not refresh updatedAt or return the item")
+        }
+
+        let eventUpdatedAt = now.addingTimeInterval(480)
+        var linkedTimestampItem = restoredTimestampItem
+        linkedTimestampItem.text = "日历更新"
+        linkedTimestampItem.calendarLink = CalendarLink(
+            eventIdentifier: "event-1",
+            calendarItemExternalIdentifier: "external-1",
+            calendarIdentifier: "calendar-1",
+            lastSyncedAt: eventUpdatedAt
+        )
+        linkedTimestampItem.calendarSyncState = .synced
+        guard timestampStore.update(linkedTimestampItem, updatedAt: eventUpdatedAt),
+              timestampStore.item(withID: timestampItem.id)?.updatedAt == eventUpdatedAt else {
+            throw CheckFailure("calendar-originated update did not preserve its event timestamp")
+        }
+
+        let reloadedTimestampStore = ItemStore(fileURL: timestampStoreURL, now: { timestampNow })
+        guard let reloadedTimestampItem = reloadedTimestampStore.item(withID: timestampItem.id),
+              reloadedTimestampItem.calendarLink == linkedTimestampItem.calendarLink,
+              reloadedTimestampItem.calendarSyncState == .synced,
+              let removedTimestampItem = reloadedTimestampStore.delete(timestampItem.id),
+              removedTimestampItem.id == timestampItem.id,
+              reloadedTimestampStore.item(withID: timestampItem.id) == nil else {
+            throw CheckFailure("calendar link did not survive reload or delete did not return the item")
         }
 
         store.delete(itemWithScreenshot.id)

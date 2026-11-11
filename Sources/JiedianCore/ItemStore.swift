@@ -96,37 +96,62 @@ public final class ItemStore: ObservableObject {
         return item
     }
 
-    public func update(_ item: CaptureItem) {
-        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+    @discardableResult
+    public func update(_ item: CaptureItem, updatedAt: Date? = nil) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return false }
+        let previous = items[index]
         var updated = item
         updated.text = Self.normalized(item.text)
-        guard !updated.text.isEmpty else { return }
+        guard !updated.text.isEmpty else { return false }
+        updated.updatedAt = updatedAt ?? now()
         items[index] = updated
-        persist()
+        guard persist() else {
+            items[index] = previous
+            return false
+        }
+        return true
     }
 
-    public func complete(_ id: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        items[index].completedAt = now()
-        persist()
+    @discardableResult
+    public func complete(_ id: UUID) -> CaptureItem? {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return nil }
+        let previous = items[index]
+        let completionDate = now()
+        items[index].completedAt = completionDate
+        items[index].updatedAt = completionDate
+        guard persist() else {
+            items[index] = previous
+            return nil
+        }
+        return items[index]
     }
 
-    public func restore(_ id: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+    @discardableResult
+    public func restore(_ id: UUID) -> CaptureItem? {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return nil }
+        let previous = items[index]
+        let restoredAt = now()
         items[index].completedAt = nil
-        persist()
+        items[index].updatedAt = restoredAt
+        guard persist() else {
+            items[index] = previous
+            return nil
+        }
+        return items[index]
     }
 
-    public func delete(_ id: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+    @discardableResult
+    public func delete(_ id: UUID) -> CaptureItem? {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return nil }
         let removed = items.remove(at: index)
         guard persist() else {
             items.insert(removed, at: min(index, items.count))
-            return
+            return nil
         }
         if let screenshotURL = screenshotURL(for: removed) {
             try? FileManager.default.removeItem(at: screenshotURL)
         }
+        return removed
     }
 
     public func item(withID id: UUID) -> CaptureItem? {
