@@ -11,6 +11,83 @@ struct JiedianChecks {
         let fileURL = directory.appendingPathComponent("items.json")
         let now = Date(timeIntervalSince1970: 1_700_000_000)
 
+        let markerItemID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let activeMarkerURL = CalendarMarker.url(for: markerItemID, isCompleted: false)
+        guard let activeMarker = CalendarMarker.parse(url: activeMarkerURL),
+              activeMarker.itemID == markerItemID,
+              !activeMarker.isCompleted else {
+            throw CheckFailure("active calendar marker did not round-trip: \(activeMarkerURL.absoluteString), parsed=\(String(describing: CalendarMarker.parse(url: activeMarkerURL)))")
+        }
+
+        let completedMarkerURL = CalendarMarker.url(for: markerItemID, isCompleted: true)
+        guard let completedMarker = CalendarMarker.parse(url: completedMarkerURL),
+              completedMarker.itemID == markerItemID,
+              completedMarker.isCompleted else {
+            throw CheckFailure("completed calendar marker did not round-trip")
+        }
+
+        guard CalendarMarker.applyCompletionPrefix(to: "review", isCompleted: true) == "✓ review",
+              CalendarMarker.applyCompletionPrefix(to: "✓ review", isCompleted: true) == "✓ review",
+              CalendarMarker.removeCompletionPrefix(from: "✓ review") == "review",
+              CalendarMarker.itemText(fromEventTitle: "✓ review", isCompleted: false) == "✓ review",
+              CalendarMarker.itemText(fromEventTitle: "✓ review", isCompleted: true) == "review" else {
+            throw CheckFailure("calendar completion title prefix was not handled safely")
+        }
+
+        let userNotes = "用户备注\n不要覆盖这一行"
+        let markedNotes = CalendarMarker.upsertNotesMarker(
+            in: userNotes,
+            itemID: markerItemID,
+            isCompleted: true
+        )
+        guard markedNotes.contains(userNotes),
+              CalendarMarker.notesMarker(in: markedNotes)?.itemID == markerItemID,
+              CalendarMarker.notesMarker(in: markedNotes)?.isCompleted == true else {
+            throw CheckFailure("calendar notes marker did not preserve user notes")
+        }
+        let updatedNotes = CalendarMarker.upsertNotesMarker(
+            in: markedNotes,
+            itemID: markerItemID,
+            isCompleted: false
+        )
+        guard updatedNotes.contains(userNotes),
+              CalendarMarker.notesMarker(in: updatedNotes)?.isCompleted == false else {
+            throw CheckFailure("calendar notes marker was not replaced in place")
+        }
+
+        let olderEvent = CalendarEventCandidate(
+            identifier: "older",
+            lastModifiedDate: now.addingTimeInterval(-60)
+        )
+        let newerEvent = CalendarEventCandidate(
+            identifier: "newer",
+            lastModifiedDate: now.addingTimeInterval(60)
+        )
+        let duplicateSelection = CalendarMarker.selectCandidate([olderEvent, newerEvent])
+        guard duplicateSelection.candidate?.identifier == "newer",
+              duplicateSelection.hasDuplicates else {
+            throw CheckFailure("duplicate calendar markers did not choose the newest event")
+        }
+
+        guard CalendarConflictResolver.winner(
+            localUpdatedAt: now.addingTimeInterval(60),
+            eventUpdatedAt: now
+        ) == .local,
+        CalendarConflictResolver.winner(
+            localUpdatedAt: now,
+            eventUpdatedAt: now.addingTimeInterval(60)
+        ) == .event,
+        CalendarConflictResolver.winner(
+            localUpdatedAt: now,
+            eventUpdatedAt: now
+        ) == .needsAttention,
+        CalendarConflictResolver.winner(
+            localUpdatedAt: nil,
+            eventUpdatedAt: now
+        ) == .needsAttention else {
+            throw CheckFailure("calendar conflict winner was not deterministic")
+        }
+
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let deadlineDefault = DeadlinePlanner.defaultDeadline(now: now, calendar: calendar)
