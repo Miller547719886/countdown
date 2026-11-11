@@ -60,6 +60,14 @@ public enum DeadlinePlanner {
         min(max(value, 0), 59)
     }
 
+    public static func isBeforeToday(
+        _ date: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Bool {
+        calendar.startOfDay(for: date) < calendar.startOfDay(for: now)
+    }
+
     public static func dateLabel(
         _ date: Date,
         now: Date = Date(),
