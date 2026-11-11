@@ -269,6 +269,9 @@ struct JiedianChecks {
         let lichun = chineseCalendar.date(
             from: DateComponents(year: 2026, month: 2, day: 4)
         )!
+        let qingming = chineseCalendar.date(
+            from: DateComponents(year: 2026, month: 4, day: 5)
+        )!
         let uncovered = chineseCalendar.date(
             from: DateComponents(year: 2028, month: 1, day: 1)
         )!
@@ -276,6 +279,13 @@ struct JiedianChecks {
         let offInfo = ChineseCalendarData.info(for: springFestivalDay, calendar: chineseCalendar)
         guard offInfo.holiday == ChineseCalendarHoliday(name: "春节", kind: .offDay) else {
             throw CheckFailure("2026-02-16 was not recognized as a Spring Festival off day: \(String(describing: offInfo.holiday))")
+        }
+
+        var arabicCalendar = chineseCalendar
+        arabicCalendar.locale = Locale(identifier: "ar_SA")
+        let arabicLocaleInfo = ChineseCalendarData.info(for: springFestivalDay, calendar: arabicCalendar)
+        guard arabicLocaleInfo.holiday == offInfo.holiday else {
+            throw CheckFailure("holiday lookup changed when the calendar locale used Arabic numerals")
         }
 
         let workInfo = ChineseCalendarData.info(for: makeUpWorkday, calendar: chineseCalendar)
@@ -286,6 +296,12 @@ struct JiedianChecks {
         let termInfo = ChineseCalendarData.info(for: lichun, calendar: chineseCalendar)
         guard termInfo.solarTerm == "立春" else {
             throw CheckFailure("2026-02-04 did not resolve to 立春: \(String(describing: termInfo.solarTerm))")
+        }
+
+        let overlapInfo = ChineseCalendarData.info(for: qingming, calendar: chineseCalendar)
+        guard overlapInfo.holiday == ChineseCalendarHoliday(name: "清明节", kind: .offDay),
+              overlapInfo.solarTerm == "清明" else {
+            throw CheckFailure("2026-04-05 did not retain both the Qingming holiday and solar term: \(overlapInfo)")
         }
 
         guard ChineseCalendarData.info(for: uncovered, calendar: chineseCalendar).holiday == nil else {

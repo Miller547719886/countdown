@@ -45,6 +45,7 @@ public struct ChineseCalendarDayInfo: Equatable, Sendable {
 
 public enum ChineseCalendarData {
     private static let supportedSolarTermYears = 1900...2100
+    private static let dateKeyLocale = Locale(identifier: "en_US_POSIX")
     private static let holidayIndex = loadHolidayIndex()
 
     public static func info(
@@ -60,7 +61,13 @@ public enum ChineseCalendarData {
             return ChineseCalendarDayInfo()
         }
 
-        let dateKey = String(format: "%04d-%02d-%02d", year, month, day)
+        let dateKey = String(
+            format: "%04d-%02d-%02d",
+            locale: dateKeyLocale,
+            year,
+            month,
+            day
+        )
         let solarTerm = solarTerm(year: year, month: month, day: day)
         return ChineseCalendarDayInfo(
             holiday: holidayIndex[dateKey],

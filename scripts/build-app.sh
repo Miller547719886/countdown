@@ -33,5 +33,8 @@ if [ -f "$project_dir/Resources/AppIcon.icns" ]; then
     cp "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/AppIcon.icns"
 fi
 
+cp "$project_dir/THIRD_PARTY_NOTICES.md" "$app_dir/Contents/Resources/THIRD_PARTY_NOTICES.md"
+cp "$project_dir/Vendor/Tyme4Swift/LICENSE" "$app_dir/Contents/Resources/Tyme4Swift-LICENSE.txt"
+
 codesign --force --deep --sign - "$app_dir"
 printf '%s\n' "Built $app_dir"

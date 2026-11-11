@@ -38,37 +38,41 @@ struct CapturePanelView: View {
             Rule(color: Palette.ruleLight)
 
             if let session = coordinator.captureSession {
-                VStack(alignment: .leading, spacing: 12) {
-                    sourceLine(session)
-                    textEditor
-                    deadlineSection
-                    screenshotSection
-                    if let captureSaveError = coordinator.captureSaveError {
-                        Text(captureSaveError)
-                            .font(TypeScale.small)
-                            .foregroundStyle(Palette.vermilion)
-                            .fixedSize(horizontal: false, vertical: true)
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        sourceLine(session)
+                        textEditor
+                        deadlineSection
+                        screenshotSection
+                        if let captureSaveError = coordinator.captureSaveError {
+                            Text(captureSaveError)
+                                .font(TypeScale.small)
+                                .foregroundStyle(Palette.vermilion)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        footer
                     }
-                    footer
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+                    .onAppear {
+                        draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
+                        deadlineMode = .quick
+                        calendarMonth = draft.deadline
+                        resetScreenshotDraft()
+                        focusedField = session.text.isEmpty ? .text : .date
+                    }
+                    .onChange(of: coordinator.captureSession?.id) { _, _ in
+                        guard let session = coordinator.captureSession else { return }
+                        draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
+                        deadlineMode = .quick
+                        calendarMonth = draft.deadline
+                        resetScreenshotDraft()
+                        focusedField = session.text.isEmpty ? .text : .date
+                    }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 12)
-                .onAppear {
-                    draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
-                    deadlineMode = .quick
-                    calendarMonth = draft.deadline
-                    resetScreenshotDraft()
-                    focusedField = session.text.isEmpty ? .text : .date
-                }
-                .onChange(of: coordinator.captureSession?.id) { _, _ in
-                    guard let session = coordinator.captureSession else { return }
-                    draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
-                    deadlineMode = .quick
-                    calendarMonth = draft.deadline
-                    resetScreenshotDraft()
-                    focusedField = session.text.isEmpty ? .text : .date
-                }
+                .scrollIndicators(.automatic)
+                .frame(minHeight: 400, alignment: .top)
             }
         }
         .frame(width: 520)

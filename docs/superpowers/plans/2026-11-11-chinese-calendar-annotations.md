@@ -165,4 +165,3 @@
   ```
 
   Expected: all commands exit 0. Report the exact upstream/data coverage and any intentionally unsupported years; do not claim holiday coverage beyond the bundled files.
-
