@@ -235,6 +235,15 @@ struct JiedianChecks {
             throw CheckFailure("date choices are not Monday-first current/next weeks")
         }
 
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        let today = calendar.startOfDay(for: now)
+        let tomorrowForBoundary = calendar.date(byAdding: .day, value: 1, to: now)!
+        guard DeadlinePlanner.isBeforeToday(yesterday, now: now, calendar: calendar),
+              !DeadlinePlanner.isBeforeToday(today, now: now, calendar: calendar),
+              !DeadlinePlanner.isBeforeToday(tomorrowForBoundary, now: now, calendar: calendar) else {
+            throw CheckFailure("date-only deadline boundary did not distinguish past, today, and future")
+        }
+
         guard DeadlinePlanner.clampedSeconds(-1) == 0,
               DeadlinePlanner.clampedSeconds(37) == 37,
               DeadlinePlanner.clampedSeconds(60) == 59 else {
