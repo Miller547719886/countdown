@@ -21,12 +21,13 @@ final class AppCoordinator: ObservableObject {
     @Published var notificationStatus: UNAuthorizationStatus = .notDetermined
     @Published private(set) var hotKeyRegistered = false
     @Published private(set) var hotKeyStatus = "尚未注册"
+    @Published private(set) var globalHotKeyShortcut = GlobalHotKeyShortcut.load()
+    @Published private(set) var isHotKeyRecording = false
 
     let calendarSyncService: CalendarSyncService
     private weak var store: ItemStore?
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
-    private var isHotKeyInstalled = false
     private var capturePanel: CapturePanel?
     private var setupGuidePanel: NSPanel?
     private var setupGuideCloseObserver: SetupGuideCloseObserver?
@@ -255,47 +256,70 @@ final class AppCoordinator: ObservableObject {
         installGlobalHotKey()
     }
 
+    func beginHotKeyRecording() {
+        guard !isHotKeyRecording else { return }
+        isHotKeyRecording = true
+        unregisterGlobalHotKey()
+        hotKeyStatus = "正在录制"
+    }
+
+    func cancelHotKeyRecording() {
+        guard isHotKeyRecording else { return }
+        isHotKeyRecording = false
+        installGlobalHotKey()
+    }
+
+    func setGlobalHotKeyShortcut(_ shortcut: GlobalHotKeyShortcut) {
+        isHotKeyRecording = false
+        globalHotKeyShortcut = shortcut
+        shortcut.save()
+        installGlobalHotKey()
+    }
+
     func refreshNotificationStatus() async {
         notificationStatus = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
     private func installGlobalHotKey() {
-        guard !isHotKeyInstalled else { return }
+        guard !isHotKeyRecording else { return }
+        unregisterGlobalHotKey()
         let eventTarget = GetApplicationEventTarget()
 
-        var eventType = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
-        let handlerStatus = InstallEventHandler(
-            eventTarget,
-            { _, _, userData in
-                captureLog.notice("hotkey callback fired")
-                guard let userData else { return noErr }
-                let coordinator = Unmanaged<AppCoordinator>.fromOpaque(userData).takeUnretainedValue()
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        coordinator.beginCapture()
+        if eventHandler == nil {
+            var eventType = EventTypeSpec(
+                eventClass: OSType(kEventClassKeyboard),
+                eventKind: UInt32(kEventHotKeyPressed)
+            )
+            let handlerStatus = InstallEventHandler(
+                eventTarget,
+                { _, _, userData in
+                    captureLog.notice("hotkey callback fired")
+                    guard let userData else { return noErr }
+                    let coordinator = Unmanaged<AppCoordinator>.fromOpaque(userData).takeUnretainedValue()
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            coordinator.beginCapture()
+                        }
                     }
-                }
-                return noErr
-            },
-            1,
-            &eventType,
-            Unmanaged.passUnretained(self).toOpaque(),
-            &eventHandler
-        )
+                    return noErr
+                },
+                1,
+                &eventType,
+                Unmanaged.passUnretained(self).toOpaque(),
+                &eventHandler
+            )
 
-        captureLog.notice("hotkey event handler status: \(handlerStatus, privacy: .public)")
-        guard handlerStatus == noErr else {
-            hotKeyStatus = "注册失败（事件处理器错误码 \(handlerStatus)）"
-            return
+            captureLog.notice("hotkey event handler status: \(handlerStatus, privacy: .public)")
+            guard handlerStatus == noErr else {
+                hotKeyStatus = "注册失败（事件处理器错误码 \(handlerStatus)）"
+                return
+            }
         }
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x4A494544), id: 1)
         let registerStatus = RegisterEventHotKey(
-            UInt32(kVK_ANSI_1),
-            UInt32(cmdKey),
+            globalHotKeyShortcut.keyCode,
+            globalHotKeyShortcut.modifiers,
             hotKeyID,
             eventTarget,
             0,
@@ -303,17 +327,25 @@ final class AppCoordinator: ObservableObject {
         )
         captureLog.notice("hotkey registration status: \(registerStatus, privacy: .public)")
         guard registerStatus == noErr else {
-            if let eventHandler {
-                RemoveEventHandler(eventHandler)
-                self.eventHandler = nil
-            }
+            hotKeyRef = nil
+            hotKeyRegistered = false
             hotKeyStatus = "注册失败（错误码 \(registerStatus)）"
             return
         }
 
-        isHotKeyInstalled = true
         hotKeyRegistered = true
         hotKeyStatus = "已注册"
+    }
+
+    private func unregisterGlobalHotKey() {
+        guard let hotKeyRef else {
+            hotKeyRegistered = false
+            return
+        }
+
+        UnregisterEventHotKey(hotKeyRef)
+        self.hotKeyRef = nil
+        hotKeyRegistered = false
     }
 
     private func presentCapture(_ session: CaptureSession) {

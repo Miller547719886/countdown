@@ -99,7 +99,7 @@ struct CapturePanelView: View {
                     .foregroundStyle(Palette.inkMuted)
             }
             Spacer()
-            Text("⌘ 1")
+            Text(coordinator.globalHotKeyShortcut.displayLabel)
                 .font(TypeScale.mono)
                 .foregroundStyle(Palette.inkFaint)
             Button {

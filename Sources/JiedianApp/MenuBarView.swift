@@ -6,7 +6,7 @@ struct MenuBarView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
 
     var body: some View {
-        Button("截取选中文字  ⌘ 1") {
+        Button("截取选中文字  \(coordinator.globalHotKeyShortcut.displayLabel)") {
             coordinator.beginCapture()
         }
         Button("手动记一项") {

@@ -138,7 +138,7 @@ struct SetupGuideView: View {
                     .foregroundStyle(Palette.ink)
             }
 
-            Text("选中一句话并按 ⌘ 1，截点就会把原文带进事项面板。")
+            Text("选中一句话并按 \(coordinator.globalHotKeyShortcut.displayLabel)，截点就会把原文带进事项面板。")
                 .font(TypeScale.body)
                 .foregroundStyle(Palette.inkMuted)
                 .fixedSize(horizontal: false, vertical: true)

@@ -31,7 +31,7 @@ struct SettingsView: View {
                 settingRow(
                     title: "读取其他应用中的选中文字",
                     detail: coordinator.accessibilityTrusted
-                        ? "已允许。按 ⌘ 1 时会直接读取当前选区。"
+                        ? "已允许。按 \(coordinator.globalHotKeyShortcut.displayLabel) 时会直接读取当前选区。"
                         : "首次使用会显示设置向导。未授权时仍可手动记一项。",
                     status: coordinator.accessibilityTrusted ? "已开启" : "未开启",
                     statusColor: coordinator.accessibilityTrusted ? Palette.olive : Palette.vermilion,
@@ -52,16 +52,7 @@ struct SettingsView: View {
 
                 Rule(color: Palette.ruleLight)
 
-                settingRow(
-                    title: "全局快捷键",
-                    detail: coordinator.hotKeyRegistered
-                        ? "在任意应用选中文字后按 ⌘ 1，即可打开捕获面板。"
-                        : "快捷键尚未就绪。可以重试注册，并查看错误码。",
-                    status: coordinator.hotKeyStatus,
-                    statusColor: coordinator.hotKeyRegistered ? Palette.olive : Palette.vermilion,
-                    actionLabel: coordinator.hotKeyRegistered ? nil : "重试注册",
-                    action: coordinator.hotKeyRegistered ? nil : { coordinator.retryGlobalHotKeyRegistration() }
-                )
+                globalHotKeySettingsRow
 
                 Rule(color: Palette.ruleLight)
 
@@ -112,6 +103,46 @@ struct SettingsView: View {
             if let actionLabel, let action {
                 Button(actionLabel, action: action)
                     .buttonStyle(SecondaryButtonStyle())
+            }
+        }
+    }
+
+    private var globalHotKeySettingsRow: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("全局快捷键")
+                    .font(TypeScale.section)
+                    .foregroundStyle(Palette.ink)
+                Spacer()
+                Text(coordinator.isHotKeyRecording ? "录制中" : coordinator.hotKeyStatus)
+                    .font(TypeScale.small)
+                    .foregroundStyle(
+                        coordinator.isHotKeyRecording
+                            ? Palette.inkMuted
+                            : coordinator.hotKeyRegistered ? Palette.olive : Palette.vermilion
+                    )
+            }
+
+            Text(coordinator.hotKeyRegistered
+                ? "在任意应用选中文字后按 \(coordinator.globalHotKeyShortcut.displayLabel)，即可打开捕获面板。"
+                : "快捷键尚未就绪。可以重试注册，并查看错误码。")
+                .font(TypeScale.small)
+                .foregroundStyle(Palette.inkMuted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HotKeyRecorderView(
+                shortcut: coordinator.globalHotKeyShortcut,
+                isRecording: coordinator.isHotKeyRecording,
+                onBeginRecording: { coordinator.beginHotKeyRecording() },
+                onCapture: { coordinator.setGlobalHotKeyShortcut($0) },
+                onCancel: { coordinator.cancelHotKeyRecording() }
+            )
+
+            if !coordinator.hotKeyRegistered && !coordinator.isHotKeyRecording {
+                Button("重试注册") {
+                    coordinator.retryGlobalHotKeyRegistration()
+                }
+                .buttonStyle(SecondaryButtonStyle())
             }
         }
     }

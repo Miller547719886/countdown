@@ -16,7 +16,7 @@ One person working across notes, messages, documents, and browsers who wants to 
 
 ## Product Purpose
 
-Let the user select text in any app, press Command-1, and immediately turn that selection into a personal item with a required deadline. Keep the resulting items visible as a calm, scannable countdown list, with optional two-way links to Apple Calendar across the user's devices.
+Let the user select text in any app, press Option+R by default (customizable in Settings), and immediately turn that selection into a personal item with a required deadline. Keep the resulting items visible as a calm, scannable countdown list, with optional two-way links to Apple Calendar across the user's devices.
 
 ## Positioning
 
@@ -28,7 +28,7 @@ The user is mid-reading or mid-writing in another app when a thought needs to be
 
 ## Capabilities and Constraints
 
-- Register Command-1 as a system-wide shortcut while the app is running.
+- Register a configurable system-wide shortcut while the app is running, defaulting to Option+R.
 - Read the current selection from the frontmost app through macOS Accessibility, with a clipboard-based fallback when Accessibility exposes no selected text.
 - Require a deadline before an item can be saved. Presets are explicit choices; custom date and time are also supported.
 - Persist items locally and show active items in deadline order with live countdown and overdue state.
