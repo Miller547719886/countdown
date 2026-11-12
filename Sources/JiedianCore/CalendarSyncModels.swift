@@ -330,3 +330,7 @@ public enum CalendarSyncStatus {
         "还有 \(count) 项需要处理。"
     }
 }
+
+public enum CalendarSyncSettingsCopy {
+    public static let allowSyncToAppleCalendar = "允许同步到 Apple Calendar"
+}

@@ -44,18 +44,17 @@ struct CalendarSyncSettingsView: View {
                     .disabled(calendarSync.isSyncing)
                 }
 
-                if calendarSync.isEnabled {
-                    Button("关闭自动同步") {
-                        calendarSync.setEnabled(false)
-                    }
-                    .buttonStyle(QuietButtonStyle())
-                } else {
-                    Button("开启自动同步") {
-                        calendarSync.setEnabled(true)
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(calendarSync.selectedCalendarIdentifier == nil)
-                }
+                Toggle(
+                    CalendarSyncSettingsCopy.allowSyncToAppleCalendar,
+                    isOn: Binding(
+                        get: { calendarSync.isEnabled },
+                        set: { calendarSync.setEnabled($0) }
+                    )
+                )
+                .toggleStyle(.switch)
+                .font(TypeScale.small)
+                .foregroundStyle(Palette.ink)
+                .disabled(!calendarSync.isEnabled && calendarSync.selectedCalendarIdentifier == nil)
 
                 Button("解除所有关联…") {
                     showUnlinkConfirmation = true
@@ -179,7 +178,7 @@ struct CalendarSyncSettingsView: View {
         case .fullAccess:
             return calendarSync.isEnabled
                 ? "带有截点标记的事件会和事项双向更新。普通日历事件不会被导入。"
-                : "选择一个日历后，手动开启自动同步；首次同步现有事项需要单独点击。"
+                : "选择一个日历后，打开“允许同步到 Apple Calendar”；首次同步现有事项需要单独点击。"
         case .notDetermined:
             return "允许后，截点可以读取和更新关联的 Apple 日历事件。"
         case .denied:

@@ -124,7 +124,8 @@ struct JiedianChecks {
             CaptureItem(text: "已同步", deadline: now, createdAt: now, calendarSyncState: .synced),
             CaptureItem(text: "待处理", deadline: now, createdAt: now, calendarSyncState: .needsAttention)
         ]) == 1,
-        CalendarSyncStatus.pendingSummary(2) == "还有 2 项需要处理。" else {
+        CalendarSyncStatus.pendingSummary(2) == "还有 2 项需要处理。",
+        CalendarSyncSettingsCopy.allowSyncToAppleCalendar == "允许同步到 Apple Calendar" else {
             throw CheckFailure("calendar pending status text/count was incorrect")
         }
 
