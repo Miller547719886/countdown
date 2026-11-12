@@ -85,7 +85,7 @@ struct MainWindowView: View {
             }
             Spacer()
             Button {
-                coordinator.showAccessibilityGuide()
+                coordinator.showSetupGuide()
             } label: {
                 HStack(spacing: 7) {
                     Circle()
@@ -97,7 +97,7 @@ struct MainWindowView: View {
                 }
             }
             .buttonStyle(.plain)
-            .help(coordinator.accessibilityTrusted ? "查看辅助功能权限状态" : "打开辅助功能设置向导")
+            .help(coordinator.accessibilityTrusted ? "查看辅助功能权限状态" : "打开初次使用设置向导")
 
             Button {
                 coordinator.beginCapture()

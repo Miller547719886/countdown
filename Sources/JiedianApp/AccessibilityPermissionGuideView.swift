@@ -1,9 +1,10 @@
 import AppKit
 import SwiftUI
 
-struct AccessibilityPermissionGuideView: View {
+struct SetupGuideView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
-    @State private var didCheckAgain = false
+    @State private var currentStep: SetupGuideStep = .accessibility
+    @State private var didCheckAccessibilityAgain = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -12,13 +13,9 @@ struct AccessibilityPermissionGuideView: View {
 
             Rule(color: Palette.ruleLight)
 
-            if coordinator.accessibilityTrusted {
-                authorizedContent
-                    .padding(.top, 24)
-            } else {
-                instructions
-                    .padding(.top, 20)
-            }
+            stepContent
+                .padding(.top, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             Spacer(minLength: 16)
             footer
@@ -27,7 +24,8 @@ struct AccessibilityPermissionGuideView: View {
         .frame(width: 800, height: 660, alignment: .topLeading)
         .background(Palette.paperRaised)
         .preferredColorScheme(.light)
-        .onExitCommand { coordinator.dismissAccessibilityGuide() }
+        .onAppear { coordinator.refreshScreenRecordingPermission() }
+        .onExitCommand { coordinator.dismissSetupGuide() }
     }
 
     private var header: some View {
@@ -43,21 +41,43 @@ struct AccessibilityPermissionGuideView: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(coordinator.accessibilityTrusted ? "选区捕获已就绪" : "开启选区捕获")
+                Text("初次使用设置")
                     .font(TypeScale.title)
                     .foregroundStyle(Palette.ink)
-                Text(coordinator.accessibilityTrusted
-                     ? "现在可以在其他应用选中文字，再按 ⌘ 1 创建事项。"
-                     : "允许截点在你按下 ⌘ 1 时读取其他应用中选中的文字。")
+                Text("按需确认系统权限，再启用 Apple Calendar 同步。")
                     .font(TypeScale.body)
                     .foregroundStyle(Palette.inkMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
             Spacer(minLength: 0)
+
+            Text("\(currentStep.rawValue + 1) / \(SetupGuideStep.allCases.count)")
+                .font(TypeScale.mono)
+                .foregroundStyle(Palette.inkFaint)
+                .padding(.top, 4)
+                .accessibilityLabel("第 \(currentStep.rawValue + 1) 项，共 \(SetupGuideStep.allCases.count) 项")
         }
     }
 
-    private var instructions: some View {
+    @ViewBuilder
+    private var stepContent: some View {
+        switch currentStep {
+        case .accessibility:
+            if coordinator.accessibilityTrusted {
+                authorizedContent
+            } else {
+                accessibilityInstructions
+            }
+        case .screenRecording:
+            screenRecordingContent
+        case .calendar:
+            CalendarSyncSettingsView(isSetupGuide: true)
+                .environmentObject(coordinator.calendarSyncService)
+        }
+    }
+
+    private var accessibilityInstructions: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 20) {
                 GuideScreenshotStep(
@@ -91,7 +111,7 @@ struct AccessibilityPermissionGuideView: View {
                     .foregroundStyle(Palette.inkMuted)
             }
 
-            if didCheckAgain && !coordinator.accessibilityTrusted {
+            if didCheckAccessibilityAgain && !coordinator.accessibilityTrusted {
                 Text("仍未检测到授权。先退出并重新打开截点；若刚更新或重建过，请移除列表中的旧“截点”，再点“+”添加当前的“截点.app”并打开开关。")
                     .font(TypeScale.small)
                     .foregroundStyle(Palette.inkMuted)
@@ -132,37 +152,140 @@ struct AccessibilityPermissionGuideView: View {
         }
     }
 
+    private var screenRecordingContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("在“隐私与安全性”中检查“屏幕录制与系统音频”。截点只使用屏幕录制权限保存你主动添加的事项截图，不会录制系统声音；不使用截图时可以跳过。")
+                .font(TypeScale.body)
+                .foregroundStyle(Palette.inkMuted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Rule(color: Palette.ruleLight)
+
+            permissionStatusRow(
+                symbol: "waveform",
+                title: "系统声音",
+                detail: "截点不会采集系统声音",
+                isAuthorized: nil
+            )
+
+            permissionStatusRow(
+                symbol: "rectangle.dashed",
+                title: "屏幕录制",
+                detail: coordinator.screenRecordingAllowed ? "已允许" : "尚未允许",
+                isAuthorized: coordinator.screenRecordingAllowed
+            )
+
+            if coordinator.screenRecordingSettingsOpenFailed {
+                Text("无法自动打开系统设置。请手动进入：系统设置 → 隐私与安全性 → 屏幕录制。")
+                    .font(TypeScale.small)
+                    .foregroundStyle(Palette.vermilion)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func permissionStatusRow(
+        symbol: String,
+        title: String,
+        detail: String,
+        isAuthorized: Bool?
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(isAuthorized == false ? Palette.vermilion : Palette.inkMuted)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+
+            Text(title)
+                .font(TypeScale.section)
+                .foregroundStyle(Palette.ink)
+
+            Spacer()
+
+            Text(detail)
+                .font(TypeScale.small)
+                .foregroundStyle(isAuthorized == false ? Palette.vermilion : Palette.inkMuted)
+        }
+        .frame(minHeight: 30)
+        .accessibilityElement(children: .combine)
+    }
+
     private var footer: some View {
         HStack(spacing: 8) {
-            if coordinator.accessibilityTrusted {
-                Button("完成") {
-                    coordinator.dismissAccessibilityGuide()
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .keyboardShortcut(.defaultAction)
-            } else {
-                Button("稍后设置") {
-                    coordinator.dismissAccessibilityGuide()
-                }
-                .buttonStyle(QuietButtonStyle())
-                .keyboardShortcut(.cancelAction)
+            Button("稍后设置") {
+                coordinator.dismissSetupGuide()
+            }
+            .buttonStyle(QuietButtonStyle())
+            .keyboardShortcut(.cancelAction)
 
-                Spacer()
+            Spacer()
 
+            if currentStep != .accessibility {
+                Button("上一步") {
+                    moveToPreviousStep()
+                }
+                .buttonStyle(SecondaryButtonStyle())
+            }
+
+            switch currentStep {
+            case .accessibility:
+                if !coordinator.accessibilityTrusted {
+                    Button("重新检查") {
+                        didCheckAccessibilityAgain = true
+                        coordinator.refreshAccessibilityPermission()
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+
+                    Button("打开系统设置") {
+                        coordinator.openAccessibilitySettings()
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                }
+            case .screenRecording:
                 Button("重新检查") {
-                    didCheckAgain = true
-                    coordinator.refreshAccessibilityPermission()
+                    coordinator.refreshScreenRecordingPermission()
                 }
                 .buttonStyle(SecondaryButtonStyle())
 
                 Button("打开系统设置") {
-                    coordinator.openAccessibilitySettings()
+                    coordinator.openScreenRecordingSettings()
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .keyboardShortcut(.defaultAction)
+                .buttonStyle(SecondaryButtonStyle())
+            case .calendar:
+                EmptyView()
             }
+
+            Button(currentStep == .calendar ? "完成" : "下一步") {
+                moveToNextStep()
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .keyboardShortcut(.defaultAction)
         }
     }
+
+    private func moveToPreviousStep() {
+        guard let previousStep = SetupGuideStep(rawValue: currentStep.rawValue - 1) else { return }
+        withAnimation(.easeOut(duration: 0.16)) {
+            currentStep = previousStep
+        }
+    }
+
+    private func moveToNextStep() {
+        guard let nextStep = SetupGuideStep(rawValue: currentStep.rawValue + 1) else {
+            coordinator.dismissSetupGuide()
+            return
+        }
+        withAnimation(.easeOut(duration: 0.16)) {
+            currentStep = nextStep
+        }
+    }
+}
+
+private enum SetupGuideStep: Int, CaseIterable {
+    case accessibility
+    case screenRecording
+    case calendar
 }
 
 private struct GuideScreenshotStep: View {

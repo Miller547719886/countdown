@@ -36,7 +36,7 @@ struct SettingsView: View {
                     status: coordinator.accessibilityTrusted ? "已开启" : "未开启",
                     statusColor: coordinator.accessibilityTrusted ? Palette.olive : Palette.vermilion,
                     actionLabel: "查看设置向导",
-                    action: { coordinator.showAccessibilityGuide() }
+                    action: { coordinator.showSetupGuide() }
                 )
 
                 Rule(color: Palette.ruleLight)

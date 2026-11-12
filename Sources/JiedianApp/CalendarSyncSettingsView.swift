@@ -4,6 +4,7 @@ import SwiftUI
 
 struct CalendarSyncSettingsView: View {
     @EnvironmentObject private var calendarSync: CalendarSyncService
+    var isSetupGuide = false
     @State private var showUnlinkConfirmation = false
 
     var body: some View {
@@ -37,11 +38,13 @@ struct CalendarSyncSettingsView: View {
                     .buttonStyle(SecondaryButtonStyle())
                     .disabled(!calendarSync.isEnabled || calendarSync.selectedCalendarIdentifier == nil)
 
-                    Button("重试同步") {
-                        calendarSync.retrySync()
+                    if !isSetupGuide {
+                        Button("重试同步") {
+                            calendarSync.retrySync()
+                        }
+                        .buttonStyle(QuietButtonStyle())
+                        .disabled(calendarSync.isSyncing)
                     }
-                    .buttonStyle(QuietButtonStyle())
-                    .disabled(calendarSync.isSyncing)
                 }
 
                 Toggle(
@@ -56,10 +59,12 @@ struct CalendarSyncSettingsView: View {
                 .foregroundStyle(Palette.ink)
                 .disabled(!calendarSync.isEnabled && calendarSync.selectedCalendarIdentifier == nil)
 
-                Button("解除所有关联…") {
-                    showUnlinkConfirmation = true
+                if !isSetupGuide {
+                    Button("解除所有关联…") {
+                        showUnlinkConfirmation = true
+                    }
+                    .buttonStyle(QuietButtonStyle())
                 }
-                .buttonStyle(QuietButtonStyle())
 
                 if calendarSync.pendingCount > 0 {
                     Text(CalendarSyncStatus.pendingSummary(calendarSync.pendingCount))

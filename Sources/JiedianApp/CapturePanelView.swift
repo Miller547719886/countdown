@@ -122,7 +122,7 @@ struct CapturePanelView: View {
             HStack {
                 Spacer()
                 Button("查看设置步骤") {
-                    coordinator.showAccessibilityGuide(restoreCapturePanel: true)
+                    coordinator.showSetupGuide(restoreCapturePanel: true)
                 }
                 .buttonStyle(.plain)
                 .font(TypeScale.small)

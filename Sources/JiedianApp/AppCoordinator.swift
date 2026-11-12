@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Combine
+import CoreGraphics
 import os
 import SwiftUI
 import UserNotifications
@@ -15,6 +16,7 @@ final class AppCoordinator: ObservableObject {
     @Published var accessibilityTrusted = AXIsProcessTrusted()
     @Published private(set) var accessibilitySettingsOpenFailed = false
     @Published private(set) var screenRecordingSettingsOpenFailed = false
+    @Published private(set) var screenRecordingAllowed = false
     @Published var captureSaveError: String?
     @Published var notificationStatus: UNAuthorizationStatus = .notDetermined
     @Published private(set) var hotKeyRegistered = false
@@ -26,14 +28,15 @@ final class AppCoordinator: ObservableObject {
     private var eventHandler: EventHandlerRef?
     private var isHotKeyInstalled = false
     private var capturePanel: CapturePanel?
-    private var accessibilityGuidePanel: NSPanel?
-    private var accessibilityGuideCloseObserver: AccessibilityGuideCloseObserver?
+    private var setupGuidePanel: NSPanel?
+    private var setupGuideCloseObserver: SetupGuideCloseObserver?
     private var mainWindow: NSWindow?
     private var permissionPollTimer: Timer?
-    private var didEvaluateFirstRunAccessibility = false
+    private var didEvaluateFirstRunSetupGuide = false
     private var shouldRestoreCapturePanelAfterGuide = false
 
     private static let accessibilityGuideDismissedKey = "accessibilitySetupGuideDismissed.v1"
+    private static let setupGuideDismissedKey = "firstRunSetupGuideDismissed.v1"
 
     init() {
         calendarSyncService = CalendarSyncService()
@@ -49,10 +52,11 @@ final class AppCoordinator: ObservableObject {
         self.store = store
         calendarSyncService.configure(store: store)
         accessibilityTrusted = AXIsProcessTrusted()
+        refreshScreenRecordingPermission()
         installGlobalHotKey()
         startPermissionPolling()
         scheduleUpcomingNotifications()
-        showFirstRunAccessibilityGuideIfNeeded()
+        showFirstRunSetupGuideIfNeeded()
     }
 
     func beginCapture() {
@@ -176,19 +180,27 @@ final class AppCoordinator: ObservableObject {
         return accessibilityTrusted
     }
 
-    func showAccessibilityGuide(restoreCapturePanel: Bool = false) {
+    @discardableResult
+    func refreshScreenRecordingPermission() -> Bool {
+        screenRecordingAllowed = CGPreflightScreenCaptureAccess()
+        return screenRecordingAllowed
+    }
+
+    func showSetupGuide(restoreCapturePanel: Bool = false) {
+        refreshScreenRecordingPermission()
+
         if restoreCapturePanel, let capturePanel, capturePanel.isVisible {
             shouldRestoreCapturePanelAfterGuide = true
             capturePanel.orderOut(nil)
         }
 
         NSApp.activate(ignoringOtherApps: true)
-        if let accessibilityGuidePanel {
-            accessibilityGuidePanel.makeKeyAndOrderFront(nil)
+        if let setupGuidePanel {
+            setupGuidePanel.makeKeyAndOrderFront(nil)
             return
         }
 
-        let root = AccessibilityPermissionGuideView()
+        let root = SetupGuideView()
             .environmentObject(self)
         let hosting = NSHostingController(rootView: root)
         let panel = NSPanel(
@@ -197,7 +209,7 @@ final class AppCoordinator: ObservableObject {
             backing: .buffered,
             defer: false
         )
-        panel.title = "辅助功能设置"
+        panel.title = "初次使用设置"
         panel.contentViewController = hosting
         panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -205,20 +217,21 @@ final class AppCoordinator: ObservableObject {
         panel.hidesOnDeactivate = false
         panel.level = .normal
 
-        let closeObserver = AccessibilityGuideCloseObserver { [weak self] in
-            self?.accessibilityGuideDidClose()
+        let closeObserver = SetupGuideCloseObserver { [weak self] in
+            self?.setupGuideDidClose()
         }
         panel.delegate = closeObserver
-        accessibilityGuidePanel = panel
-        accessibilityGuideCloseObserver = closeObserver
+        setupGuidePanel = panel
+        setupGuideCloseObserver = closeObserver
 
         panel.center()
         panel.makeKeyAndOrderFront(nil)
     }
 
-    func dismissAccessibilityGuide() {
+    func dismissSetupGuide() {
+        UserDefaults.standard.set(true, forKey: Self.setupGuideDismissedKey)
         UserDefaults.standard.set(true, forKey: Self.accessibilityGuideDismissedKey)
-        accessibilityGuidePanel?.close()
+        setupGuidePanel?.close()
     }
 
     func requestNotificationPermission() {
@@ -332,29 +345,34 @@ final class AppCoordinator: ObservableObject {
         permissionPollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshAccessibilityPermission()
+                self?.refreshScreenRecordingPermission()
             }
         }
     }
 
-    private func showFirstRunAccessibilityGuideIfNeeded() {
-        guard !didEvaluateFirstRunAccessibility else { return }
-        didEvaluateFirstRunAccessibility = true
+    private func showFirstRunSetupGuideIfNeeded() {
+        guard !didEvaluateFirstRunSetupGuide else { return }
+        didEvaluateFirstRunSetupGuide = true
 
-        guard !refreshAccessibilityPermission(),
-              !UserDefaults.standard.bool(forKey: Self.accessibilityGuideDismissedKey) else {
-            return
-        }
+        guard !hasDismissedSetupGuide else { return }
 
         DispatchQueue.main.async { [weak self] in
-            guard let self, !self.refreshAccessibilityPermission() else { return }
-            self.showAccessibilityGuide()
+            guard let self, !self.hasDismissedSetupGuide else { return }
+            self.showSetupGuide()
         }
     }
 
-    private func accessibilityGuideDidClose() {
+    private var hasDismissedSetupGuide: Bool {
+        let defaults = UserDefaults.standard
+        return defaults.bool(forKey: Self.setupGuideDismissedKey)
+            || defaults.bool(forKey: Self.accessibilityGuideDismissedKey)
+    }
+
+    private func setupGuideDidClose() {
+        UserDefaults.standard.set(true, forKey: Self.setupGuideDismissedKey)
         UserDefaults.standard.set(true, forKey: Self.accessibilityGuideDismissedKey)
-        accessibilityGuidePanel = nil
-        accessibilityGuideCloseObserver = nil
+        setupGuidePanel = nil
+        setupGuideCloseObserver = nil
 
         guard shouldRestoreCapturePanelAfterGuide else { return }
         shouldRestoreCapturePanelAfterGuide = false
@@ -380,7 +398,7 @@ final class AppCoordinator: ObservableObject {
 }
 
 @MainActor
-private final class AccessibilityGuideCloseObserver: NSObject, NSWindowDelegate {
+private final class SetupGuideCloseObserver: NSObject, NSWindowDelegate {
     private let onClose: () -> Void
 
     init(onClose: @escaping () -> Void) {
