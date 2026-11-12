@@ -212,6 +212,10 @@ final class CalendarSyncService: ObservableObject {
         }
     }
 
+    func syncNewItem(_ item: CaptureItem) {
+        syncLocalMutation(before: nil, after: item)
+    }
+
     func reconcile() {
         guard isEnabled, !isApplyingLocalChange else { return }
         guard beginSyncOperation() else { return }
@@ -422,7 +426,12 @@ final class CalendarSyncService: ObservableObject {
             updated.calendarSyncState = lookup.hasDuplicates || !calendarIsWritable
                 ? .needsAttention
                 : .synced
-            _ = store?.update(updated, updatedAt: eventDate)
+            if store?.update(updated, updatedAt: eventDate) == true {
+                NotificationService.shared.update(
+                    before: item,
+                    after: store?.item(withID: item.id) ?? updated
+                )
+            }
             if lookup.hasDuplicates {
                 lastError = "发现多个相同的截点日历事件，请在设置中处理。"
             } else if !calendarIsWritable {

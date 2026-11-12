@@ -182,8 +182,8 @@ struct CalendarSyncSettingsView: View {
         switch calendarSync.accessStatus {
         case .fullAccess:
             return calendarSync.isEnabled
-                ? "带有截点标记的事件会和事项双向更新。普通日历事件不会被导入。"
-                : "选择一个日历后，打开“允许同步到 Apple Calendar”；首次同步现有事项需要单独点击。"
+                ? "新建事项会自动同步；已有事项可点“同步现有事项”。带有截点标记的事件会双向更新。"
+                : "选择一个日历并开启同步后，新建事项会自动同步；已有事项需点“同步现有事项”。"
         case .notDetermined:
             return "允许后，截点可以读取和更新关联的 Apple 日历事件。"
         case .denied:

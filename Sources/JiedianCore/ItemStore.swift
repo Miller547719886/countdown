@@ -50,6 +50,7 @@ public final class ItemStore: ObservableObject {
         text: String,
         deadline: Date,
         sourceApp: String?,
+        reminders: [DeadlineReminder] = ReminderPlanner.defaultReminders(),
         screenshotData: Data? = nil
     ) -> CaptureItem? {
         let cleanText = Self.normalized(text)
@@ -85,7 +86,8 @@ public final class ItemStore: ObservableObject {
             deadline: deadline,
             createdAt: now(),
             sourceApp: sourceApp,
-            screenshotFilename: screenshotFilename
+            screenshotFilename: screenshotFilename,
+            reminders: reminders
         )
         items.append(item)
         guard persist() else {

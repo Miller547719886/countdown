@@ -128,11 +128,11 @@ struct SettingsView: View {
     private var notificationDetail: String {
         switch coordinator.notificationStatus {
         case .authorized, .provisional, .ephemeral:
-            "到达截止时间时，系统会显示一条本地通知。"
+            "每条事项可设置多次提前提醒；到达提醒时间时，系统会显示本地通知。"
         case .denied:
             "通知权限已被拒绝。请在系统设置中允许“截点”发送通知。"
         case .notDetermined:
-            "允许后，到达截止时间时会收到一条本地通知。"
+            "允许后，会按每条事项设置的时间收到提前提醒。"
         @unknown default:
             "无法读取通知权限状态。"
         }

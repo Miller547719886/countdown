@@ -9,6 +9,7 @@ public struct CaptureItem: Identifiable, Codable, Equatable, Sendable {
     public var completedAt: Date?
     public var sourceApp: String?
     public var screenshotFilename: String?
+    public var reminders: [DeadlineReminder]
     public var calendarLink: CalendarLink?
     public var calendarSyncState: CalendarSyncState
 
@@ -21,6 +22,7 @@ public struct CaptureItem: Identifiable, Codable, Equatable, Sendable {
         case completedAt
         case sourceApp
         case screenshotFilename
+        case reminders
         case calendarLink
         case calendarSyncState
     }
@@ -34,6 +36,7 @@ public struct CaptureItem: Identifiable, Codable, Equatable, Sendable {
         completedAt: Date? = nil,
         sourceApp: String? = nil,
         screenshotFilename: String? = nil,
+        reminders: [DeadlineReminder] = ReminderPlanner.defaultReminders(),
         calendarLink: CalendarLink? = nil,
         calendarSyncState: CalendarSyncState = .unlinked
     ) {
@@ -45,6 +48,7 @@ public struct CaptureItem: Identifiable, Codable, Equatable, Sendable {
         self.completedAt = completedAt
         self.sourceApp = sourceApp
         self.screenshotFilename = screenshotFilename
+        self.reminders = reminders
         self.calendarLink = calendarLink
         self.calendarSyncState = calendarSyncState
     }
@@ -59,6 +63,8 @@ public struct CaptureItem: Identifiable, Codable, Equatable, Sendable {
         self.completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
         self.sourceApp = try container.decodeIfPresent(String.self, forKey: .sourceApp)
         self.screenshotFilename = try container.decodeIfPresent(String.self, forKey: .screenshotFilename)
+        self.reminders = try container.decodeIfPresent([DeadlineReminder].self, forKey: .reminders)
+            ?? [DeadlineReminder.custom(date: deadline)]
         self.calendarLink = try container.decodeIfPresent(CalendarLink.self, forKey: .calendarLink)
         self.calendarSyncState = try container.decodeIfPresent(
             CalendarSyncState.self,
@@ -76,6 +82,7 @@ public struct CaptureItem: Identifiable, Codable, Equatable, Sendable {
         try container.encodeIfPresent(completedAt, forKey: .completedAt)
         try container.encodeIfPresent(sourceApp, forKey: .sourceApp)
         try container.encodeIfPresent(screenshotFilename, forKey: .screenshotFilename)
+        try container.encode(reminders, forKey: .reminders)
         try container.encodeIfPresent(calendarLink, forKey: .calendarLink)
         try container.encode(calendarSyncState, forKey: .calendarSyncState)
     }

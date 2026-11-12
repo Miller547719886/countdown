@@ -88,13 +88,20 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
-    func saveCapture(text: String, deadline: Date, sourceApp: String?, screenshotData: Data? = nil) {
+    func saveCapture(
+        text: String,
+        deadline: Date,
+        sourceApp: String?,
+        screenshotData: Data? = nil,
+        reminders: [DeadlineReminder] = ReminderPlanner.defaultReminders()
+    ) {
         captureSaveError = nil
         guard let store else { return }
         guard let item = store.add(
             text: text,
             deadline: deadline,
             sourceApp: sourceApp,
+            reminders: reminders,
             screenshotData: screenshotData
         ) else {
             captureSaveError = store.loadError ?? "无法保存这条事项，请重试。"
@@ -104,8 +111,7 @@ final class AppCoordinator: ObservableObject {
         capturePanel = nil
         captureSession = nil
         NotificationService.shared.schedule(for: item)
-        forwardLocalMutation(before: nil, after: item)
-        scheduleUpcomingNotifications()
+        calendarSyncService.syncNewItem(item)
     }
 
     func update(_ item: CaptureItem) {
@@ -115,6 +121,7 @@ final class AppCoordinator: ObservableObject {
               let after = store.item(withID: item.id) else {
             return
         }
+        NotificationService.shared.update(before: before, after: after)
         forwardLocalMutation(before: before, after: after)
     }
 
@@ -124,6 +131,7 @@ final class AppCoordinator: ObservableObject {
               let after = store.complete(id) else {
             return
         }
+        NotificationService.shared.update(before: before, after: after)
         forwardLocalMutation(before: before, after: after)
     }
 
@@ -133,6 +141,7 @@ final class AppCoordinator: ObservableObject {
               let after = store.restore(id) else {
             return
         }
+        NotificationService.shared.update(before: before, after: after)
         forwardLocalMutation(before: before, after: after)
     }
 
@@ -142,6 +151,7 @@ final class AppCoordinator: ObservableObject {
               store.delete(id) != nil else {
             return
         }
+        NotificationService.shared.update(before: before, after: nil)
         forwardLocalMutation(before: before, after: nil)
     }
 
@@ -382,7 +392,7 @@ final class AppCoordinator: ObservableObject {
 
     private func scheduleUpcomingNotifications() {
         guard let store else { return }
-        NotificationService.shared.scheduleAll(store.activeItems)
+        NotificationService.shared.scheduleAll(store.items)
     }
 
     private func forwardLocalMutation(before: CaptureItem?, after: CaptureItem?) {
@@ -518,29 +528,65 @@ final class NotificationService {
     static let shared = NotificationService()
     private let center = UNUserNotificationCenter.current()
 
+    private func identifier(for item: CaptureItem, reminderIndex: Int) -> String {
+        "jiedian-reminder-\(item.id.uuidString.lowercased())-\(reminderIndex)"
+    }
+
     private init() {}
 
     func schedule(for item: CaptureItem) {
-        guard item.deadline > Date() else { return }
-        let content = UNMutableNotificationContent()
-        content.title = "期限到了"
-        content.body = item.text
-        content.sound = .default
-        let trigger = UNTimeIntervalNotificationTrigger(
-            timeInterval: max(1, item.deadline.timeIntervalSinceNow),
-            repeats: false
-        )
-        let request = UNNotificationRequest(
-            identifier: "deadline-\(item.id.uuidString)",
-            content: content,
-            trigger: trigger
-        )
-        center.add(request)
+        cancel(for: item)
+        scheduleRequests(for: item)
+    }
+
+    func update(before: CaptureItem?, after: CaptureItem?) {
+        if let before {
+            cancel(for: before)
+        }
+        guard let after, !after.isCompleted else { return }
+        schedule(for: after)
     }
 
     func scheduleAll(_ items: [CaptureItem]) {
-        for item in items where item.deadline > Date() {
-            schedule(for: item)
+        for item in items {
+            cancel(for: item)
+            guard !item.isCompleted else { continue }
+            scheduleRequests(for: item)
+        }
+    }
+
+    private func cancel(for item: CaptureItem) {
+        let reminderIdentifiers = item.reminders.indices.map { identifier(for: item, reminderIndex: $0) }
+        center.removePendingNotificationRequests(
+            withIdentifiers: reminderIdentifiers + ["deadline-\(item.id.uuidString)"]
+        )
+    }
+
+    private func scheduleRequests(for item: CaptureItem) {
+        guard !item.isCompleted else { return }
+
+        for (index, reminder) in item.reminders.enumerated() {
+            guard let fireDate = reminder.fireDate(relativeTo: item.deadline),
+                  fireDate > Date(),
+                  fireDate <= item.deadline else {
+                continue
+            }
+
+            let content = UNMutableNotificationContent()
+            content.title = "事项即将到期"
+            content.body = item.text
+            content.sound = .default
+            let components = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: fireDate
+            )
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: identifier(for: item, reminderIndex: index),
+                content: content,
+                trigger: trigger
+            )
+            center.add(request)
         }
     }
 }
