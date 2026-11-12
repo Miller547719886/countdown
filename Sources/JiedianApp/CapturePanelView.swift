@@ -81,6 +81,9 @@ struct CapturePanelView: View {
         .preferredColorScheme(.light)
         .onExitCommand { coordinator.dismissCapture() }
         .onDisappear { screenshotTask?.cancel() }
+        .onChange(of: coordinator.capturePanelSpaceToggleRequest) { _, _ in
+            saveScreenshot.toggle()
+        }
     }
 
     private var panelHeader: some View {
