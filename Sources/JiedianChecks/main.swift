@@ -5,6 +5,48 @@ import JiedianCore
 struct JiedianChecks {
     @MainActor
     static func main() async throws {
+        let spaceKeyCode: UInt16 = 49
+        guard CapturePanelKeyboardBehavior.shouldToggleSaveScreenshot(
+            keyCode: spaceKeyCode,
+            hasModifier: false,
+            isKeyWindow: true,
+            isFormControlFocused: false
+        ) else {
+            throw CheckFailure("plain space was not accepted for a focused panel without form control focus")
+        }
+        guard !CapturePanelKeyboardBehavior.shouldToggleSaveScreenshot(
+            keyCode: spaceKeyCode,
+            hasModifier: false,
+            isKeyWindow: true,
+            isFormControlFocused: true
+        ) else {
+            throw CheckFailure("space was accepted while a form control was focused")
+        }
+        guard !CapturePanelKeyboardBehavior.shouldToggleSaveScreenshot(
+            keyCode: spaceKeyCode,
+            hasModifier: false,
+            isKeyWindow: false,
+            isFormControlFocused: false
+        ) else {
+            throw CheckFailure("space was accepted while the capture panel was not key")
+        }
+        guard !CapturePanelKeyboardBehavior.shouldToggleSaveScreenshot(
+            keyCode: spaceKeyCode,
+            hasModifier: true,
+            isKeyWindow: true,
+            isFormControlFocused: false
+        ) else {
+            throw CheckFailure("modified space was accepted")
+        }
+        guard !CapturePanelKeyboardBehavior.shouldToggleSaveScreenshot(
+            keyCode: 36,
+            hasModifier: false,
+            isKeyWindow: true,
+            isFormControlFocused: false
+        ) else {
+            throw CheckFailure("a non-space key was accepted")
+        }
+
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("JiedianChecks-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
