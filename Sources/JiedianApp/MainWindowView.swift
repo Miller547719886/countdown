@@ -104,7 +104,7 @@ struct MainWindowView: View {
             } label: {
                 HStack(spacing: 8) {
                     Text("截取选中文字")
-                    ShortcutKey(label: "⌘ 1")
+                    ShortcutKey(label: coordinator.globalHotKeyShortcut.displayLabel)
                 }
             }
             .buttonStyle(SecondaryButtonStyle())
@@ -180,13 +180,7 @@ struct MainWindowView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Rule(color: Palette.ruleLight)
                 HStack(spacing: 7) {
-                    Text("⌘")
-                        .font(TypeScale.mono)
-                    Text("+")
-                        .font(TypeScale.mono)
-                        .foregroundStyle(Palette.inkFaint)
-                    Text("1")
-                        .font(TypeScale.mono)
+                    ShortcutKey(label: coordinator.globalHotKeyShortcut.displayLabel)
                     Text("随时截取")
                         .font(TypeScale.small)
                         .foregroundStyle(Palette.inkMuted)
@@ -256,7 +250,7 @@ struct MainWindowView: View {
                 EmptyStateMark(
                     symbol: "text.cursor",
                     title: "还没有截下任何事",
-                    detail: "在 Safari、备忘录或任何可选中文字的地方选中一句话，按 ⌘ 1。它会带着原话来到这里，等你交给它一个期限。"
+                    detail: "在 Safari、备忘录或任何可选中文字的地方选中一句话，按 \(coordinator.globalHotKeyShortcut.displayLabel)。它会带着原话来到这里，等你交给它一个期限。"
                 )
                 .padding(.horizontal, 32)
             } else {
