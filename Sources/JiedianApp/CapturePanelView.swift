@@ -311,7 +311,7 @@ struct CapturePanelView: View {
 
     private var calendarView: some View {
         VStack(spacing: 9) {
-            HStack {
+            HStack(spacing: 8) {
                 Button {
                     shiftCalendarMonth(by: -1)
                 } label: {
@@ -321,14 +321,39 @@ struct CapturePanelView: View {
                 }
                 .buttonStyle(QuietButtonStyle())
                 .accessibilityLabel("上个月")
+                .disabled(!canNavigateToPreviousCalendarMonth)
 
-                Spacer()
+                Spacer(minLength: 0)
 
-                Text(calendarMonthTitle)
+                HStack(spacing: 0) {
+                    Picker("年份", selection: calendarYearBinding) {
+                        ForEach(calendarYearRange, id: \.self) { year in
+                            Text("\(year)年").tag(year)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
                     .font(TypeScale.section)
-                    .foregroundStyle(Palette.ink)
+                    .tint(Palette.ink)
+                    .accessibilityLabel("日历年份")
+                    .accessibilityHint("选择要浏览的年份")
+                    .help("选择年份")
 
-                Spacer()
+                    Picker("月份", selection: calendarMonthBinding) {
+                        ForEach(1...12, id: \.self) { month in
+                            Text("\(month)月").tag(month)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .font(TypeScale.section)
+                    .tint(Palette.ink)
+                    .accessibilityLabel("日历月份")
+                    .accessibilityHint("选择要浏览的月份")
+                    .help("选择月份")
+                }
+
+                Spacer(minLength: 0)
 
                 Button {
                     shiftCalendarMonth(by: 1)
@@ -339,6 +364,7 @@ struct CapturePanelView: View {
                 }
                 .buttonStyle(QuietButtonStyle())
                 .accessibilityLabel("下个月")
+                .disabled(!canNavigateToNextCalendarMonth)
             }
 
             HStack(spacing: 6) {
@@ -395,12 +421,45 @@ struct CapturePanelView: View {
         }
     }
 
-    private var calendarMonthTitle: String {
-        let formatter = DateFormatter()
-        formatter.locale = DeadlineText.chineseLocale
-        formatter.calendar = Calendar.current
-        formatter.dateFormat = "yyyy年M月"
-        return formatter.string(from: calendarMonth)
+    private let calendarYearRange = 1900...2100
+
+    private var calendarYear: Int {
+        Calendar.current.component(.year, from: calendarMonth)
+    }
+
+    private var calendarMonthNumber: Int {
+        Calendar.current.component(.month, from: calendarMonth)
+    }
+
+    private var calendarYearBinding: Binding<Int> {
+        Binding(
+            get: { calendarYear },
+            set: { setCalendarMonth(year: $0, month: calendarMonthNumber) }
+        )
+    }
+
+    private var calendarMonthBinding: Binding<Int> {
+        Binding(
+            get: { calendarMonthNumber },
+            set: { setCalendarMonth(year: calendarYear, month: $0) }
+        )
+    }
+
+    private var canNavigateToPreviousCalendarMonth: Bool {
+        calendarYear > calendarYearRange.lowerBound || calendarMonthNumber > 1
+    }
+
+    private var canNavigateToNextCalendarMonth: Bool {
+        calendarYear < calendarYearRange.upperBound || calendarMonthNumber < 12
+    }
+
+    private func setCalendarMonth(year: Int, month: Int) {
+        guard calendarYearRange.contains(year), (1...12).contains(month) else { return }
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = 1
+        calendarMonth = Calendar.current.date(from: components) ?? calendarMonth
     }
 
     private var calendarMonthDates: [Date?] {
@@ -520,11 +579,17 @@ struct CapturePanelView: View {
     }
 
     private func shiftCalendarMonth(by value: Int) {
-        calendarMonth = Calendar.current.date(
+        let calendar = Calendar.current
+        guard let shiftedMonth = calendar.date(
             byAdding: .month,
             value: value,
             to: calendarMonth
-        ) ?? calendarMonth
+        ) else {
+            return
+        }
+        let components = calendar.dateComponents([.year, .month], from: shiftedMonth)
+        guard let year = components.year, let month = components.month else { return }
+        setCalendarMonth(year: year, month: month)
     }
 
     private func selectDeadlineDate(_ date: Date) {
