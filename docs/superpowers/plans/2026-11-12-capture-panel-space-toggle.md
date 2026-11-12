@@ -37,7 +37,7 @@
 **Interfaces:**
 - Produces: `CapturePanelKeyboardBehavior.shouldToggleSaveScreenshot(keyCode:hasModifier:isKeyWindow:isFormControlFocused:) -> Bool`；调用方传入按键码、是否带设备无关修饰键、窗口 key 状态和第一响应者是否在表单控件内。
 
-- [ ] **Step 1: 写失败检查**
+- [x] **Step 1: 写失败检查**
 
   在现有 `JiedianChecks.main()` 开头加入五个独立 guard 断言，为以下行为抛出明确的 `CheckFailure`：
 
@@ -47,23 +47,23 @@
   - 带修饰键：`hasModifier == true` 时断言为 `false`。
   - 非空格键：使用其他键码时断言为 `false`。
 
-- [ ] **Step 2: 运行失败测试确认缺少生产接口**
+- [x] **Step 2: 运行失败测试确认缺少生产接口**
 
   Run: `swift run JiedianChecks`
 
   Expected: 编译失败，原因是 `CapturePanelKeyboardBehavior` 尚未定义；不能因为测试脚本或已有检查失败而失败。
 
-- [ ] **Step 3: 实现最小资格判断**
+- [x] **Step 3: 实现最小资格判断**
 
   在 `Sources/JiedianCore/CapturePanelKeyboardBehavior.swift` 定义 `public enum CapturePanelKeyboardBehavior`，提供 `public static let spaceKeyCode: UInt16 = 49` 和上述静态方法。方法只在四个条件同时满足时返回 `true`：键码等于空格键码、没有设备无关修饰键、面板是 key window、第一响应者不在表单控件内。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
   Run: `swift run JiedianChecks`
 
   Expected: 新增的 5 个按键断言与已有核心检查全部通过，无编译警告或运行时错误。
 
-- [ ] **Step 5: 提交资格判断变更**
+- [x] **Step 5: 提交资格判断变更**
 
   ```bash
   git add Sources/JiedianChecks/main.swift Sources/JiedianCore/CapturePanelKeyboardBehavior.swift docs/superpowers/plans/2026-11-12-capture-panel-space-toggle.md
@@ -81,31 +81,31 @@
 - Consumes: `CapturePanelKeyboardBehavior.shouldToggleSaveScreenshot(...)` from Task 1.
 - Produces: `CapturePanel` subclass; `AppCoordinator.capturePanelSpaceToggleRequest` request counter and `requestCapturePanelSpaceToggle()` method; `CapturePanelView` 对该计数的观察。
 
-- [ ] **Step 1: 在 `CapturePanel` 中实现事件过滤**
+- [x] **Step 1: 在 `CapturePanel` 中实现事件过滤**
 
   创建 `NSPanel` 子类并覆盖 `keyDown(with:)`。用 `event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty` 计算 `hasModifier`，从 `firstResponder` 沿 `nextResponder` 链检查 `NSControl` 或 `NSTextView`；将这些条件与 `isKeyWindow`、`event.keyCode` 传给 Task 1 的资格判断。返回 `true` 时调用 `onPlainSpace` 并停止传播，否则调用 `super.keyDown(with:)`。
 
-- [ ] **Step 2: 在 `AppCoordinator` 接入面板和请求计数**
+- [x] **Step 2: 在 `AppCoordinator` 接入面板和请求计数**
 
   将 `capturePanel` 类型改为 `CapturePanel`，增加从 0 开始的 `@Published` 请求计数和主线程方法 `requestCapturePanelSpaceToggle()`。在 `makeCapturePanel()` 创建 `CapturePanel`，设置 `onPlainSpace` 为弱引用 coordinator 的请求回调；其他面板样式和生命周期保持不变。
 
-- [ ] **Step 3: 在 `CapturePanelView` 观察请求并切换状态**
+- [x] **Step 3: 在 `CapturePanelView` 观察请求并切换状态**
 
   在根视图生命周期修饰符中增加对 `coordinator.capturePanelSpaceToggleRequest` 的 `onChange`，每次请求只执行一次 `saveScreenshot.toggle()`。不修改现有 `saveScreenshot` 的 `onChange`，使开启/关闭仍分别触发截图采集和清理。
 
-- [ ] **Step 4: 编译验证事件接线**
+- [x] **Step 4: 编译验证事件接线**
 
   Run: `swift build`
 
   Expected: `JiedianApp` 和 `JiedianCore` 编译、链接成功；不出现 actor 隔离、AppKit 类型或 SwiftUI `onChange` 签名错误。
 
-- [ ] **Step 5: 运行完整核心检查**
+- [x] **Step 5: 运行完整核心检查**
 
   Run: `swift run JiedianChecks`
 
   Expected: `JiedianChecks` 中的按键断言及包内所有核心检查通过；记录检查输出。
 
-- [ ] **Step 6: 提交面板快捷键接线**
+- [x] **Step 6: 提交面板快捷键接线**
 
   ```bash
   git add Sources/JiedianApp/CapturePanel.swift Sources/JiedianApp/AppCoordinator.swift Sources/JiedianApp/CapturePanelView.swift
@@ -117,21 +117,28 @@
 **Files:**
 - Modify: `docs/superpowers/plans/2026-11-12-capture-panel-space-toggle.md`（勾选完成项，如有必要补充验证记录）
 
-- [ ] **Step 1: 检查差异与行为范围**
+- [x] **Step 1: 检查差异与行为范围**
 
   Run: `git diff HEAD~2..HEAD --stat && git diff HEAD~2..HEAD --check`
 
   Expected: 仅包含设计/计划、键盘资格判断、核心检查、面板事件过滤和状态接线；无空白错误。
 
-- [ ] **Step 2: 运行发布构建**
+- [x] **Step 2: 运行发布构建**
 
   Run: `swift build -c release`
 
   Expected: release 构建成功。
 
-- [ ] **Step 3: 提交最终验证记录（如有变更）**
+- [x] **Step 3: 提交最终验证记录（如有变更）**
 
   ```bash
   git add docs/superpowers/plans/2026-11-12-capture-panel-space-toggle.md
   git commit -m "docs: record capture panel shortcut verification"
   ```
+
+## Verification Record
+
+- `swift run JiedianChecks`：通过，包含新增的 5 个按键资格断言及既有核心检查。
+- `swift build`：通过。
+- `swift build -c release`：通过。
+- 当前环境仅安装 CommandLineTools，没有 `XCTest`/Swift Testing 模块，因此测试覆盖通过现有 `JiedianChecks` 可执行检查完成。
