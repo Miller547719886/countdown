@@ -42,10 +42,10 @@ struct CapturePanelView: View {
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: 12) {
                         sourceLine(session)
+                        screenshotSection
                         textEditor
                         deadlineSection
                         reminderSection
-                        screenshotSection
                         if let captureSaveError = coordinator.captureSaveError {
                             Text(captureSaveError)
                                 .font(TypeScale.small)
@@ -85,9 +85,6 @@ struct CapturePanelView: View {
         .preferredColorScheme(.light)
         .onExitCommand { coordinator.dismissCapture() }
         .onDisappear { screenshotTask?.cancel() }
-        .onChange(of: coordinator.capturePanelSpaceToggleRequest) { _, _ in
-            saveScreenshot.toggle()
-        }
         .onChange(of: draft.deadline) { _, deadline in
             guard isUsingDefaultReminderPlan else { return }
             draft.reminders = ReminderPlanner.defaultReminders(for: deadline)

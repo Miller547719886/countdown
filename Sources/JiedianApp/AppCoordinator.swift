@@ -12,7 +12,6 @@ private let captureLog = Logger(subsystem: "com.xiongyufeng.jiedian", category: 
 @MainActor
 final class AppCoordinator: ObservableObject {
     @Published var captureSession: CaptureSession?
-    @Published private(set) var capturePanelSpaceToggleRequest = 0
     @Published var accessibilityTrusted = AXIsProcessTrusted()
     @Published private(set) var accessibilitySettingsOpenFailed = false
     @Published private(set) var screenRecordingSettingsOpenFailed = false
@@ -28,7 +27,7 @@ final class AppCoordinator: ObservableObject {
     private weak var store: ItemStore?
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
-    private var capturePanel: CapturePanel?
+    private var capturePanel: NSPanel?
     private var setupGuidePanel: NSPanel?
     private var setupGuideCloseObserver: SetupGuideCloseObserver?
     private var mainWindow: NSWindow?
@@ -183,10 +182,6 @@ final class AppCoordinator: ObservableObject {
         capturePanel?.close()
         capturePanel = nil
         captureSession = nil
-    }
-
-    func requestCapturePanelSpaceToggle() {
-        capturePanelSpaceToggleRequest += 1
     }
 
     func openAccessibilitySettings() {
@@ -383,19 +378,16 @@ final class AppCoordinator: ObservableObject {
         panel.makeKeyAndOrderFront(nil)
     }
 
-    private func makeCapturePanel() -> CapturePanel {
+    private func makeCapturePanel() -> NSPanel {
         let root = CapturePanelView()
             .environmentObject(self)
         let hosting = NSHostingController(rootView: root)
-        let panel = CapturePanel(
+        let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 460),
             styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        panel.onPlainSpace = { [weak self] in
-            self?.requestCapturePanelSpaceToggle()
-        }
         panel.contentViewController = hosting
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
