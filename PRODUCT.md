@@ -34,7 +34,7 @@ The user is mid-reading or mid-writing in another app when a thought needs to be
 - Persist items locally and show active items in deadline order with live countdown and overdue state.
 - Complete, restore, edit, and delete items.
 - Show completed items separately. Do not include progress percentages, progress bars, or goal decomposition.
-- Offer configurable per-item local notifications before deadlines when the user has granted notification permission; support multiple reminders and a custom date/time.
+- Send a local notification when an active item's deadline arrives, and offer configurable per-item early reminders when the user has granted notification permission.
 - Offer opt-in two-way synchronization for events created and marked by 截点 through Apple Calendar/EventKit; automatically sync new items after saving when enabled, while existing items require explicit migration.
 - Do not import unmarked calendar events; calendar-side deletion only unlinks and preserves the local item.
 - Keep the app usable when Accessibility permission is not yet granted: the capture panel opens and allows manual entry, while the main window explains how to enable selection capture.

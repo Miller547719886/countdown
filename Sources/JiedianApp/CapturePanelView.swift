@@ -5,6 +5,7 @@ import JiedianCore
 struct CapturePanelView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @State private var draft = CaptureDraft(text: "", deadline: CaptureDraft.defaultDeadline())
+    @State private var isUsingDefaultReminderPlan = true
     @State private var saveScreenshot = true
     @State private var deadlineMode: DeadlineEditorMode = .quick
     @State private var calendarMonth = Date()
@@ -57,6 +58,7 @@ struct CapturePanelView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 12)
                     .onAppear {
+                        isUsingDefaultReminderPlan = true
                         draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
                         deadlineMode = .quick
                         calendarMonth = draft.deadline
@@ -65,6 +67,7 @@ struct CapturePanelView: View {
                     }
                     .onChange(of: coordinator.captureSession?.id) { _, _ in
                         guard let session = coordinator.captureSession else { return }
+                        isUsingDefaultReminderPlan = true
                         draft = CaptureDraft(text: session.text, deadline: CaptureDraft.defaultDeadline())
                         deadlineMode = .quick
                         calendarMonth = draft.deadline
@@ -84,6 +87,10 @@ struct CapturePanelView: View {
         .onDisappear { screenshotTask?.cancel() }
         .onChange(of: coordinator.capturePanelSpaceToggleRequest) { _, _ in
             saveScreenshot.toggle()
+        }
+        .onChange(of: draft.deadline) { _, deadline in
+            guard isUsingDefaultReminderPlan else { return }
+            draft.reminders = ReminderPlanner.defaultReminders(for: deadline)
         }
     }
 
@@ -205,7 +212,17 @@ struct CapturePanelView: View {
     }
 
     private var reminderSection: some View {
-        ReminderEditorView(reminders: $draft.reminders, deadline: draft.deadline)
+        ReminderEditorView(reminders: reminderPlanBinding, deadline: draft.deadline)
+    }
+
+    private var reminderPlanBinding: Binding<[DeadlineReminder]> {
+        Binding(
+            get: { draft.reminders },
+            set: { reminders in
+                draft.reminders = reminders
+                isUsingDefaultReminderPlan = false
+            }
+        )
     }
 
     private var quickDeadlineEditor: some View {
@@ -835,7 +852,13 @@ struct CaptureDraft {
     var text: String
     var deadline: Date
     var deadlineConfirmed = false
-    var reminders = ReminderPlanner.defaultReminders()
+    var reminders: [DeadlineReminder]
+
+    init(text: String, deadline: Date) {
+        self.text = text
+        self.deadline = deadline
+        reminders = ReminderPlanner.defaultReminders(for: deadline)
+    }
 
     var hasCustomReminderAfterDeadline: Bool {
         ReminderPlanner.hasCustomReminderAtOrAfterDeadline(reminders, deadline: deadline)

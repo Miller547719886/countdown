@@ -33,6 +33,7 @@ final class AppCoordinator: ObservableObject {
     private var setupGuideCloseObserver: SetupGuideCloseObserver?
     private var mainWindow: NSWindow?
     private var openMainWindow: (() -> Void)?
+    private var shouldHideAppAfterCaptureDismissal = false
     private var permissionPollTimer: Timer?
     private var didEvaluateFirstRunSetupGuide = false
     private var shouldRestoreCapturePanelAfterGuide = false
@@ -98,6 +99,7 @@ final class AppCoordinator: ObservableObject {
     }
 
     func returnToMainWindow() {
+        shouldHideAppAfterCaptureDismissal = false
         dismissCapture()
         showMainWindow()
     }
@@ -171,6 +173,13 @@ final class AppCoordinator: ObservableObject {
 
     func dismissCapture() {
         captureSaveError = nil
+
+        let shouldHideApp = shouldHideAppAfterCaptureDismissal
+        shouldHideAppAfterCaptureDismissal = false
+        if shouldHideApp {
+            NSApp.hide(nil)
+        }
+
         capturePanel?.close()
         capturePanel = nil
         captureSession = nil
@@ -362,6 +371,10 @@ final class AppCoordinator: ObservableObject {
     }
 
     private func presentCapture(_ session: CaptureSession) {
+        if capturePanel?.isVisible != true {
+            shouldHideAppAfterCaptureDismissal = !NSApp.isActive || !hasVisibleMainWindow
+        }
+
         captureSession = session
         NSApp.activate(ignoringOtherApps: true)
 
@@ -393,6 +406,12 @@ final class AppCoordinator: ObservableObject {
         panel.hidesOnDeactivate = false
         panel.center()
         return panel
+    }
+
+    private var hasVisibleMainWindow: Bool {
+        NSApp.windows.contains { window in
+            !(window is NSPanel) && window.canBecomeMain && window.isVisible
+        }
     }
 
     private func startPermissionPolling() {
@@ -610,28 +629,52 @@ final class NotificationService {
     private func scheduleRequests(for item: CaptureItem) {
         guard !item.isCompleted else { return }
 
+        let now = Date()
+        if item.deadline > now {
+            scheduleNotification(
+                for: item,
+                fireDate: item.deadline,
+                identifier: "deadline-\(item.id.uuidString)",
+                title: "事项已到期"
+            )
+        }
+
         for (index, reminder) in item.reminders.enumerated() {
             guard let fireDate = reminder.fireDate(relativeTo: item.deadline),
-                  fireDate > Date(),
-                  fireDate <= item.deadline else {
+                  fireDate > now,
+                  fireDate < item.deadline else {
                 continue
             }
 
-            let content = UNMutableNotificationContent()
-            content.title = "事项即将到期"
-            content.body = item.text
-            content.sound = .default
-            let components = Calendar.current.dateComponents(
-                [.year, .month, .day, .hour, .minute, .second],
-                from: fireDate
-            )
-            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-            let request = UNNotificationRequest(
+            scheduleNotification(
+                for: item,
+                fireDate: fireDate,
                 identifier: identifier(for: item, reminderIndex: index),
-                content: content,
-                trigger: trigger
+                title: "事项即将到期"
             )
-            center.add(request)
         }
+    }
+
+    private func scheduleNotification(
+        for item: CaptureItem,
+        fireDate: Date,
+        identifier: String,
+        title: String
+    ) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = item.text
+        content.sound = .default
+        let components = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: fireDate
+        )
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: trigger
+        )
+        center.add(request)
     }
 }

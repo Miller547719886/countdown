@@ -25,14 +25,23 @@ struct ReminderEditorView: View {
         return formatter
     }()
 
+    private let hoursFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .none
+        formatter.minimum = 1
+        formatter.maximum = NSNumber(value: ReminderPlanner.maximumHoursBeforeDeadline)
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("提前多久提醒我")
-                        .font(TypeScale.label)
-                        .foregroundStyle(Palette.inkFaint)
-                    Text("默认依次提前 N 到 1 天，早上 08:00 提醒。")
+                    Text("提醒")
+                        .font(TypeScale.section)
+                        .foregroundStyle(Palette.ink)
+                    Text(defaultReminderDescription)
                         .font(TypeScale.small)
                         .foregroundStyle(Palette.inkMuted)
                 }
@@ -71,8 +80,23 @@ struct ReminderEditorView: View {
     private var reminderCountBinding: Binding<Int> {
         Binding(
             get: { reminders.count },
-            set: { reminders = ReminderPlanner.resize(reminders, to: $0) }
+            set: {
+                reminders = ReminderPlanner.resize(
+                    reminders,
+                    to: $0,
+                    unit: ReminderPlanner.defaultRelativeUnit(for: deadline)
+                )
+            }
         )
+    }
+
+    private var defaultReminderDescription: String {
+        switch ReminderPlanner.defaultRelativeUnit(for: deadline) {
+        case .hours:
+            "到期时也会提醒；当日默认依次提前 N 到 1 小时。"
+        case .days:
+            "到期时也会提醒；默认依次提前 N 到 1 天，早上 08:00 提醒。"
+        }
     }
 
     private var hasCustomReminderAtOrAfterDeadline: Bool {
@@ -91,7 +115,8 @@ struct ReminderEditorView: View {
                     "第 \(index + 1) 次提醒方式",
                     selection: reminderModeBinding(at: index)
                 ) {
-                    Text("提前天数").tag(DeadlineReminderMode.relative)
+                    Text(reminders[index].relativeUnit == .hours ? "提前小时" : "提前天数")
+                        .tag(DeadlineReminderMode.relative)
                     Text("自定义").tag(DeadlineReminderMode.custom)
                 }
                 .labelsHidden()
@@ -100,32 +125,7 @@ struct ReminderEditorView: View {
             }
 
             if reminders[index].mode == .relative {
-                HStack(spacing: 8) {
-                    Text("提前")
-                        .font(TypeScale.small)
-                        .foregroundStyle(Palette.inkMuted)
-                    FieldBox {
-                        TextField("", value: reminderDaysBinding(at: index), formatter: daysFormatter)
-                            .textFieldStyle(.plain)
-                            .font(TypeScale.mono)
-                            .multilineTextAlignment(.center)
-                            .frame(width: 34)
-                            .accessibilityLabel("第 \(index + 1) 次提前天数")
-                    }
-                    .frame(width: 54)
-                    Text("天")
-                        .font(TypeScale.small)
-                        .foregroundStyle(Palette.inkMuted)
-                    DatePicker(
-                        "",
-                        selection: reminderTimeBinding(at: index),
-                        displayedComponents: .hourAndMinute
-                    )
-                    .labelsHidden()
-                    .datePickerStyle(.field)
-                    .accessibilityLabel("第 \(index + 1) 次提醒时间")
-                    Spacer(minLength: 0)
-                }
+                relativeReminderEditor(at: index)
             } else {
                 HStack(spacing: 8) {
                     DatePicker(
@@ -151,6 +151,47 @@ struct ReminderEditorView: View {
         .padding(.vertical, 7)
     }
 
+    private func relativeReminderEditor(at index: Int) -> some View {
+        let unit = reminders[index].relativeUnit
+        return HStack(spacing: 8) {
+            Text("提前")
+                .font(TypeScale.small)
+                .foregroundStyle(Palette.inkMuted)
+            FieldBox {
+                TextField(
+                    "",
+                    value: reminderValueBinding(at: index),
+                    formatter: relativeValueFormatter(at: index)
+                )
+                .textFieldStyle(.plain)
+                .font(TypeScale.mono)
+                .multilineTextAlignment(.center)
+                .frame(width: 34)
+                .accessibilityLabel(
+                    unit == .hours
+                        ? "第 \(index + 1) 次提前小时数"
+                        : "第 \(index + 1) 次提前天数"
+                )
+            }
+            .frame(width: 54)
+            Text(unit == .hours ? "小时" : "天")
+                .font(TypeScale.small)
+                .foregroundStyle(Palette.inkMuted)
+
+            if unit == .days {
+                DatePicker(
+                    "",
+                    selection: reminderTimeBinding(at: index),
+                    displayedComponents: .hourAndMinute
+                )
+                .labelsHidden()
+                .datePickerStyle(.field)
+                .accessibilityLabel("第 \(index + 1) 次提醒时间")
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
     private func reminderModeBinding(at index: Int) -> Binding<DeadlineReminderMode> {
         Binding(
             get: { reminders[index].mode },
@@ -159,22 +200,38 @@ struct ReminderEditorView: View {
                 if mode == .custom, reminder.mode != .custom {
                     reminder.customDate = reminder.fireDate(relativeTo: deadline) ?? deadline
                 }
+                if mode == .relative, reminder.mode != .relative {
+                    let value = reminder.relativeValue
+                    switch ReminderPlanner.defaultRelativeUnit(for: deadline) {
+                    case .days:
+                        reminder.daysBeforeDeadline = min(
+                            max(value, 1),
+                            ReminderPlanner.maximumDaysBeforeDeadline
+                        )
+                        reminder.hoursBeforeDeadline = nil
+                    case .hours:
+                        reminder.daysBeforeDeadline = 1
+                        reminder.hoursBeforeDeadline = min(
+                            max(value, 1),
+                            ReminderPlanner.maximumHoursBeforeDeadline
+                        )
+                    }
+                }
                 reminder.mode = mode
                 reminders[index] = reminder
             }
         )
     }
 
-    private func reminderDaysBinding(at index: Int) -> Binding<Int> {
+    private func reminderValueBinding(at index: Int) -> Binding<Int> {
         Binding(
-            get: { reminders[index].daysBeforeDeadline },
-            set: {
-                reminders[index].daysBeforeDeadline = min(
-                    max($0, 1),
-                    ReminderPlanner.maximumDaysBeforeDeadline
-                )
-            }
+            get: { reminders[index].relativeValue },
+            set: { reminders[index].relativeValue = $0 }
         )
+    }
+
+    private func relativeValueFormatter(at index: Int) -> NumberFormatter {
+        reminders[index].relativeUnit == .hours ? hoursFormatter : daysFormatter
     }
 
     private func reminderTimeBinding(at index: Int) -> Binding<Date> {
