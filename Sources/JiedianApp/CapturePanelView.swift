@@ -102,6 +102,10 @@ struct CapturePanelView: View {
             Text(coordinator.globalHotKeyShortcut.displayLabel)
                 .font(TypeScale.mono)
                 .foregroundStyle(Palette.inkFaint)
+            Button("回到主窗口") {
+                coordinator.returnToMainWindow()
+            }
+            .buttonStyle(QuietButtonStyle())
             Button {
                 coordinator.dismissCapture()
             } label: {
@@ -201,206 +205,7 @@ struct CapturePanelView: View {
     }
 
     private var reminderSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("提前多久提醒我")
-                        .font(TypeScale.label)
-                        .foregroundStyle(Palette.inkFaint)
-                    Text("默认依次提前 N 到 1 天，早上 08:00 提醒。")
-                        .font(TypeScale.small)
-                        .foregroundStyle(Palette.inkMuted)
-                }
-                Spacer(minLength: 8)
-                Stepper(value: $draft.reminderCount, in: 0...ReminderPlanner.maximumReminderCount) {
-                    Text(draft.reminderCount == 0 ? "关闭" : "\(draft.reminderCount) 次")
-                        .font(TypeScale.small)
-                        .foregroundStyle(Palette.ink)
-                }
-                .accessibilityLabel("提醒次数")
-            }
-
-            if draft.reminders.isEmpty {
-                Text("这条事项不会提前提醒。")
-                    .font(TypeScale.small)
-                    .foregroundStyle(Palette.inkFaint)
-            } else {
-                ForEach(draft.reminders.indices, id: \.self) { index in
-                    reminderEditor(at: index)
-                    if index < draft.reminders.count - 1 {
-                        Rule(color: Palette.ruleLight)
-                    }
-                }
-            }
-
-            if draft.hasCustomReminderAfterDeadline {
-                Text("自定义提醒时间必须早于截止时间。")
-                    .font(TypeScale.small)
-                    .foregroundStyle(Palette.vermilion)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.top, 2)
-    }
-
-    private func reminderEditor(at index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center) {
-                Text("第 \(index + 1) 次提醒")
-                    .font(TypeScale.label)
-                    .foregroundStyle(Palette.ink)
-                Spacer(minLength: 8)
-                Picker(
-                    "第 \(index + 1) 次提醒方式",
-                    selection: reminderModeBinding(at: index)
-                ) {
-                    Text("提前天数").tag(DeadlineReminderMode.relative)
-                    Text("自定义").tag(DeadlineReminderMode.custom)
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 150)
-            }
-
-            if draft.reminders[index].mode == .relative {
-                HStack(spacing: 8) {
-                    Stepper(
-                        value: reminderDaysBinding(at: index),
-                        in: 1...ReminderPlanner.maximumDaysBeforeDeadline
-                    ) {
-                        Text("提前 \(draft.reminders[index].daysBeforeDeadline) 天")
-                            .font(TypeScale.small)
-                            .foregroundStyle(Palette.inkMuted)
-                    }
-                    .accessibilityLabel("第 \(index + 1) 次提前天数")
-
-                    Spacer(minLength: 4)
-                    DatePicker(
-                        "",
-                        selection: reminderTimeBinding(at: index),
-                        displayedComponents: .hourAndMinute
-                    )
-                    .labelsHidden()
-                    .datePickerStyle(.field)
-                    .accessibilityLabel("第 \(index + 1) 次提醒时间")
-                }
-            } else {
-                DatePicker(
-                    "自定义日期",
-                    selection: customReminderDateBinding(at: index),
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.graphical)
-                .accessibilityLabel("第 \(index + 1) 次自定义提醒日期")
-
-                HStack(spacing: 8) {
-                    Text("提醒时间")
-                        .font(TypeScale.small)
-                        .foregroundStyle(Palette.inkMuted)
-                    DatePicker(
-                        "",
-                        selection: customReminderTimeBinding(at: index),
-                        displayedComponents: .hourAndMinute
-                    )
-                    .labelsHidden()
-                    .datePickerStyle(.field)
-                    .accessibilityLabel("第 \(index + 1) 次自定义提醒时间")
-                    Spacer()
-                }
-            }
-        }
-        .padding(.vertical, 7)
-    }
-
-    private func reminderModeBinding(at index: Int) -> Binding<DeadlineReminderMode> {
-        Binding(
-            get: { draft.reminders[index].mode },
-            set: { mode in
-                var reminder = draft.reminders[index]
-                if mode == .custom, reminder.mode != .custom {
-                    reminder.customDate = reminder.fireDate(relativeTo: draft.deadline) ?? draft.deadline
-                }
-                reminder.mode = mode
-                draft.reminders[index] = reminder
-            }
-        )
-    }
-
-    private func reminderDaysBinding(at index: Int) -> Binding<Int> {
-        Binding(
-            get: { draft.reminders[index].daysBeforeDeadline },
-            set: { draft.reminders[index].daysBeforeDeadline = $0 }
-        )
-    }
-
-    private func reminderTimeBinding(at index: Int) -> Binding<Date> {
-        Binding(
-            get: {
-                timePickerValue(
-                    hour: draft.reminders[index].hour,
-                    minute: draft.reminders[index].minute
-                )
-            },
-            set: { value in
-                let components = Calendar.current.dateComponents([.hour, .minute], from: value)
-                draft.reminders[index].hour = components.hour ?? 8
-                draft.reminders[index].minute = components.minute ?? 0
-            }
-        )
-    }
-
-    private func customReminderDateBinding(at index: Int) -> Binding<Date> {
-        Binding(
-            get: {
-                draft.reminders[index].customDate
-                    ?? draft.reminders[index].fireDate(relativeTo: draft.deadline)
-                    ?? draft.deadline
-            },
-            set: { value in
-                let calendar = Calendar.current
-                let current = draft.reminders[index].customDate ?? value
-                let time = calendar.dateComponents([.hour, .minute], from: current)
-                var components = calendar.dateComponents([.era, .year, .month, .day], from: value)
-                components.hour = time.hour ?? 8
-                components.minute = time.minute ?? 0
-                components.second = 0
-                draft.reminders[index].customDate = calendar.date(from: components) ?? value
-            }
-        )
-    }
-
-    private func customReminderTimeBinding(at index: Int) -> Binding<Date> {
-        Binding(
-            get: {
-                let current = draft.reminders[index].customDate
-                    ?? draft.reminders[index].fireDate(relativeTo: draft.deadline)
-                    ?? draft.deadline
-                let components = Calendar.current.dateComponents([.hour, .minute], from: current)
-                return timePickerValue(hour: components.hour ?? 8, minute: components.minute ?? 0)
-            },
-            set: { value in
-                let calendar = Calendar.current
-                let current = draft.reminders[index].customDate
-                    ?? draft.reminders[index].fireDate(relativeTo: draft.deadline)
-                    ?? draft.deadline
-                let time = calendar.dateComponents([.hour, .minute], from: value)
-                var components = calendar.dateComponents([.era, .year, .month, .day], from: current)
-                components.hour = time.hour ?? 8
-                components.minute = time.minute ?? 0
-                components.second = 0
-                draft.reminders[index].customDate = calendar.date(from: components) ?? current
-            }
-        )
-    }
-
-    private func timePickerValue(hour: Int, minute: Int) -> Date {
-        var components = DateComponents()
-        components.year = 2001
-        components.month = 1
-        components.day = 1
-        components.hour = hour
-        components.minute = minute
-        return Calendar(identifier: .gregorian).date(from: components) ?? .distantPast
+        ReminderEditorView(reminders: $draft.reminders, deadline: draft.deadline)
     }
 
     private var quickDeadlineEditor: some View {
@@ -1032,17 +837,8 @@ struct CaptureDraft {
     var deadlineConfirmed = false
     var reminders = ReminderPlanner.defaultReminders()
 
-    var reminderCount: Int {
-        get { reminders.count }
-        set { reminders = ReminderPlanner.resize(reminders, to: newValue) }
-    }
-
     var hasCustomReminderAfterDeadline: Bool {
-        reminders.contains { reminder in
-            guard reminder.mode == .custom else { return false }
-            guard let customDate = reminder.customDate else { return true }
-            return customDate >= deadline
-        }
+        ReminderPlanner.hasCustomReminderAtOrAfterDeadline(reminders, deadline: deadline)
     }
 
     var trimmedText: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }

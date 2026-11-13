@@ -19,6 +19,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 struct MainWindowView: View {
     @EnvironmentObject private var store: ItemStore
     @EnvironmentObject private var coordinator: AppCoordinator
+    @Environment(\.openWindow) private var openWindow
     @State private var section: AppSection = .active
     @State private var now = Date()
     @State private var editingItem: CaptureItem?
@@ -39,6 +40,9 @@ struct MainWindowView: View {
                     content
                 }
             }
+        }
+        .onAppear {
+            coordinator.setMainWindowOpener { openWindow(id: "main") }
         }
         .onReceive(clock) { now = $0 }
         .sheet(item: $editingItem) { item in

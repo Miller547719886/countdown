@@ -32,6 +32,7 @@ final class AppCoordinator: ObservableObject {
     private var setupGuidePanel: NSPanel?
     private var setupGuideCloseObserver: SetupGuideCloseObserver?
     private var mainWindow: NSWindow?
+    private var openMainWindow: (() -> Void)?
     private var permissionPollTimer: Timer?
     private var didEvaluateFirstRunSetupGuide = false
     private var shouldRestoreCapturePanelAfterGuide = false
@@ -84,9 +85,21 @@ final class AppCoordinator: ObservableObject {
 
     func showMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
-        if let window = mainWindow ?? NSApp.windows.first(where: { $0.canBecomeMain }) {
+        if let window = mainWindow.flatMap({ $0.isVisible ? $0 : nil })
+            ?? NSApp.windows.first(where: { !($0 is NSPanel) && $0.canBecomeMain && $0.isVisible }) {
             window.makeKeyAndOrderFront(nil)
+        } else {
+            openMainWindow?()
         }
+    }
+
+    func setMainWindowOpener(_ opener: @escaping () -> Void) {
+        openMainWindow = opener
+    }
+
+    func returnToMainWindow() {
+        dismissCapture()
+        showMainWindow()
     }
 
     func saveCapture(

@@ -122,4 +122,15 @@ public enum ReminderPlanner {
             return reminder
         }
     }
+
+    public static func hasCustomReminderAtOrAfterDeadline(
+        _ reminders: [DeadlineReminder],
+        deadline: Date
+    ) -> Bool {
+        reminders.contains { reminder in
+            guard reminder.mode == .custom else { return false }
+            guard let customDate = reminder.customDate else { return true }
+            return customDate >= deadline
+        }
+    }
 }

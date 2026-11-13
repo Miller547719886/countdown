@@ -5,6 +5,7 @@ struct EditItemSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var text: String
     @State private var deadline: Date
+    @State private var reminders: [DeadlineReminder]
     let item: CaptureItem
     let onSave: (CaptureItem) -> Void
 
@@ -13,6 +14,21 @@ struct EditItemSheet: View {
         self.onSave = onSave
         _text = State(initialValue: item.text)
         _deadline = State(initialValue: item.deadline)
+        _reminders = State(initialValue: item.reminders)
+    }
+
+    private var preservesExistingInvalidReminderPlan: Bool {
+        reminders == item.reminders
+            && deadline == item.deadline
+            && ReminderPlanner.hasCustomReminderAtOrAfterDeadline(
+                item.reminders,
+                deadline: item.deadline
+            )
+    }
+
+    private var hasInvalidCustomReminder: Bool {
+        !preservesExistingInvalidReminderPlan
+            && ReminderPlanner.hasCustomReminderAtOrAfterDeadline(reminders, deadline: deadline)
     }
 
     var body: some View {
@@ -22,7 +38,7 @@ struct EditItemSheet: View {
                     Text("修改这件事")
                         .font(TypeScale.title)
                         .foregroundStyle(Palette.ink)
-                    Text("文字和期限都可以重新交代。")
+                    Text("文字、期限和提醒都可以重新设置。")
                         .font(TypeScale.small)
                         .foregroundStyle(Palette.inkMuted)
                 }
@@ -42,7 +58,8 @@ struct EditItemSheet: View {
 
             Rule(color: Palette.ruleLight)
 
-            VStack(alignment: .leading, spacing: 18) {
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("事项")
                         .font(TypeScale.label)
@@ -75,24 +92,39 @@ struct EditItemSheet: View {
                     }
                 }
 
-                HStack {
-                    Spacer()
-                    Button("取消") { dismiss() }
-                        .buttonStyle(QuietButtonStyle())
-                        .keyboardShortcut(.cancelAction)
-                    Button("保存修改") {
-                        var updated = item
-                        updated.text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        updated.deadline = deadline
-                        onSave(updated)
-                        dismiss()
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    ReminderEditorView(
+                        reminders: $reminders,
+                        deadline: deadline,
+                        allowsUnchangedInvalidPlan: preservesExistingInvalidReminderPlan
+                    )
                 }
+                .padding(24)
             }
-            .padding(24)
+            .frame(maxHeight: 560)
+            .scrollIndicators(.automatic)
+
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }
+                    .buttonStyle(QuietButtonStyle())
+                    .keyboardShortcut(.cancelAction)
+                Button("保存修改") {
+                    var updated = item
+                    updated.text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    updated.deadline = deadline
+                    updated.reminders = reminders
+                    onSave(updated)
+                    dismiss()
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
+                .disabled(
+                    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || hasInvalidCustomReminder
+                )
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
         }
         .frame(width: 500)
         .background(Palette.paperRaised)
