@@ -425,6 +425,13 @@ final class AppCoordinator: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.hasDismissedSetupGuide else { return }
             self.showSetupGuide()
+            guard FirstRunSetupPolicy.shouldOpenAccessibilitySettings(
+                isGuideDismissed: self.hasDismissedSetupGuide,
+                accessibilityTrusted: self.refreshAccessibilityPermission()
+            ) else {
+                return
+            }
+            self.openAccessibilitySettings()
         }
     }
 

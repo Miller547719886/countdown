@@ -11,6 +11,21 @@ struct JiedianChecks {
         let fileURL = directory.appendingPathComponent("items.json")
         let now = Date(timeIntervalSince1970: 1_700_000_000)
 
+        guard FirstRunSetupPolicy.shouldOpenAccessibilitySettings(
+            isGuideDismissed: false,
+            accessibilityTrusted: false
+        ),
+        !FirstRunSetupPolicy.shouldOpenAccessibilitySettings(
+            isGuideDismissed: false,
+            accessibilityTrusted: true
+        ),
+        !FirstRunSetupPolicy.shouldOpenAccessibilitySettings(
+            isGuideDismissed: true,
+            accessibilityTrusted: false
+        ) else {
+            throw CheckFailure("first-run Accessibility settings policy was incorrect")
+        }
+
         let markerItemID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
         let activeMarkerURL = CalendarMarker.url(for: markerItemID, isCompleted: false)
         guard let activeMarker = CalendarMarker.parse(url: activeMarkerURL),
